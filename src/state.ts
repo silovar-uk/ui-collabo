@@ -1,0 +1,203 @@
+import { signal, computed, effect } from '@preact/signals';
+import { kvGet, kvSet } from './lib/storage';
+import { emptyLibrary, newBoard, SCHEMA, type Board, type Format, type Library, type RuleSet, type Rules, type Spot } from './schema';
+
+const LIBRARY_KEY = 'library';
+const LAST_BOARD_KEY = 'lastBoardId';
+const SAVE_DEBOUNCE_MS = 500;
+
+export const ready = signal(false);
+export const library = signal<Library>(emptyLibrary());
+export const currentBoardId = signal<string | null>(null);
+export const selectedSpotId = signal<string | null>(null);
+/** Ctrl+Z 用の直前1操作のみのスナップショット。履歴スタックは持たない。 */
+let undoSnapshot: Board | null = null;
+
+export const currentBoard = computed<Board | null>(() => {
+  const id = currentBoardId.value;
+  if (!id) return null;
+  return library.value.boards.find((b) => b.id === id) ?? null;
+});
+
+/** 表示中のページ(UI状態のみ。永続化しない)。 */
+export const activePageId = signal<string | null>(null);
+effect(() => {
+  const board = currentBoard.value;
+  if (!board) {
+    activePageId.value = null;
+    return;
+  }
+  if (!board.pages.some((p) => p.id === activePageId.value)) {
+    activePageId.value = board.pages[0]?.id ?? null;
+  }
+});
+
+export async function init(): Promise<void> {
+  const loaded = await kvGet<Library>(LIBRARY_KEY);
+  if (loaded) library.value = loaded;
+  const lastId = await kvGet<string>(LAST_BOARD_KEY);
+  if (lastId && library.value.boards.some((b) => b.id === lastId)) {
+    currentBoardId.value = lastId;
+  }
+  ready.value = true;
+}
+
+let saveTimer: ReturnType<typeof setTimeout> | undefined;
+function scheduleSave(): void {
+  if (saveTimer) clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    void kvSet(LIBRARY_KEY, library.value);
+  }, SAVE_DEBOUNCE_MS);
+}
+
+export function createBoard(format: Format): Board {
+  const board = newBoard(format);
+  library.value = { ...library.value, boards: [...library.value.boards, board] };
+  currentBoardId.value = board.id;
+  void kvSet(LAST_BOARD_KEY, board.id);
+  scheduleSave();
+  return board;
+}
+
+export function openBoard(id: string): void {
+  currentBoardId.value = id;
+  selectedSpotId.value = null;
+  void kvSet(LAST_BOARD_KEY, id);
+}
+
+export function deleteBoard(id: string): void {
+  library.value = { ...library.value, boards: library.value.boards.filter((b) => b.id !== id) };
+  if (currentBoardId.value === id) currentBoardId.value = null;
+  scheduleSave();
+}
+
+/** 現在のボードを recipe で更新し、自動保存をスケジュールする。 */
+export function updateBoard(recipe: (board: Board) => Board): void {
+  const board = currentBoard.value;
+  if (!board) return;
+  undoSnapshot = board;
+  const next = { ...recipe(board), updatedAt: new Date().toISOString() };
+  library.value = {
+    ...library.value,
+    boards: library.value.boards.map((b) => (b.id === next.id ? next : b)),
+  };
+  scheduleSave();
+}
+
+export function undo(): void {
+  if (!undoSnapshot) return;
+  const snapshot = undoSnapshot;
+  library.value = {
+    ...library.value,
+    boards: library.value.boards.map((b) => (b.id === snapshot.id ? snapshot : b)),
+  };
+  undoSnapshot = null;
+  scheduleSave();
+}
+
+export function nextSpotNumber(board: Board): number {
+  return board.spots.length === 0 ? 1 : Math.max(...board.spots.map((s) => s.n)) + 1;
+}
+
+export function findSpot(board: Board, id: string): Spot | undefined {
+  return board.spots.find((s) => s.id === id);
+}
+
+/**
+ * スポイトで色を拾う予約。null 以外の間、ボードのクリックは箇所作成ではなく色の採取になり、
+ * 拾った hex は onPick に渡される。書き込み先(箇所のノート/ルール)は呼び出し側が onPick に閉じ込める。
+ */
+export const colorPickRequest = signal<{ onPick: (hex: string) => void } | null>(null);
+
+/** 「見る順」モード。true の間、箇所クリックは選択ではなく見る順への追加/削除になる。 */
+export const orderMode = signal(false);
+
+export function toggleOrderSpot(id: string): void {
+  updateBoard((b) => ({
+    ...b,
+    order: b.order.includes(id) ? b.order.filter((x) => x !== id) : [...b.order, id],
+  }));
+}
+
+// --- ライブラリ(ルールセット・型・書き出し/読み込み) ---
+
+export function saveRuleSet(name: string, rules: Rules): void {
+  const ruleSet: RuleSet = { id: crypto.randomUUID(), name, rules, createdAt: new Date().toISOString() };
+  library.value = { ...library.value, ruleSets: [...library.value.ruleSets, ruleSet] };
+  scheduleSave();
+}
+
+export function applyRuleSet(id: string): void {
+  const ruleSet = library.value.ruleSets.find((r) => r.id === id);
+  if (!ruleSet) return;
+  updateBoard((b) => ({ ...b, rules: ruleSet.rules }));
+}
+
+export function deleteRuleSet(id: string): void {
+  library.value = { ...library.value, ruleSets: library.value.ruleSets.filter((r) => r.id !== id) };
+  scheduleSave();
+}
+
+/** 現在のボードを画像抜き(箇所配置+ルールのみ)で型として複製保存する。 */
+export function saveAsTemplate(): void {
+  const board = currentBoard.value;
+  if (!board) return;
+  const now = new Date().toISOString();
+  const template: Board = {
+    ...board,
+    id: crypto.randomUUID(),
+    createdAt: now,
+    updatedAt: now,
+    imageRole: null,
+    pages: board.pages.map((p) => ({ id: p.id, label: p.label, image: null })),
+  };
+  library.value = { ...library.value, templates: [...library.value.templates, template] };
+  scheduleSave();
+}
+
+export function deleteTemplate(id: string): void {
+  library.value = { ...library.value, templates: library.value.templates.filter((t) => t.id !== id) };
+  scheduleSave();
+}
+
+/** 型から、id を振り直した新しい白紙ボードを作って開く(ページ構成と箇所配置・ルールはそのまま複製)。 */
+export function createFromTemplate(id: string): void {
+  const template = library.value.templates.find((t) => t.id === id);
+  if (!template) return;
+  cloneAndOpenBoard(template);
+}
+
+/** サンプル/型のボードを、id を振り直した新しいボードとして複製して開く。 */
+export function cloneAndOpenBoard(source: Board): void {
+  const pageIdMap = new Map<string, string>(source.pages.map((p) => [p.id, crypto.randomUUID()]));
+  const spotIdMap = new Map<string, string>(source.spots.map((s) => [s.id, crypto.randomUUID()]));
+  const now = new Date().toISOString();
+  const board: Board = {
+    ...source,
+    id: crypto.randomUUID(),
+    createdAt: now,
+    updatedAt: now,
+    pages: source.pages.map((p) => ({ ...p, id: pageIdMap.get(p.id)! })),
+    spots: source.spots.map((s) => ({ ...s, id: spotIdMap.get(s.id)!, pageId: pageIdMap.get(s.pageId)! })),
+    order: source.order.map((id) => spotIdMap.get(id)).filter((id): id is string => !!id),
+  };
+  library.value = { ...library.value, boards: [...library.value.boards, board] };
+  currentBoardId.value = board.id;
+  void kvSet(LAST_BOARD_KEY, board.id);
+  scheduleSave();
+}
+
+export function exportLibraryJson(): string {
+  return JSON.stringify(library.value, null, 2);
+}
+
+/** 書き出したJSONを読み込み、ライブラリを置き換える。schemaが一致しない場合は例外を投げる。 */
+export function importLibraryJson(text: string): void {
+  const parsed = JSON.parse(text) as Library;
+  if (parsed.schema !== SCHEMA) {
+    throw new Error(`未対応のファイル形式です(${parsed.schema ?? '不明'})`);
+  }
+  library.value = parsed;
+  currentBoardId.value = null;
+  scheduleSave();
+}
