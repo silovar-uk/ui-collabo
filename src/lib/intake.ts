@@ -1,5 +1,6 @@
 import { activePageId, createBoard, currentBoard, updateBoard } from '../state';
 import { fileToImage } from './image';
+import { sanitizeHtml } from './html';
 import type { Page } from '../schema';
 
 async function filesToPages(files: File[]): Promise<Page[]> {
@@ -18,4 +19,31 @@ export async function handleFiles(files: File[]): Promise<void> {
   if (!currentBoard.value) createBoard({ kind: 'web' });
   updateBoard((b) => ({ ...b, pages: [...b.pages, ...pages] }));
   activePageId.value = pages[0].id;
+}
+
+/** HTMLをページとしてボードに取り込む。ボードがなければ新規作成する。 */
+export async function handleHtml(rawHtml: string, opts: { origin?: string; allowExternal: boolean }): Promise<void> {
+  const { html, title, origin } = sanitizeHtml(rawHtml);
+  const isNewBoard = !currentBoard.value;
+  if (isNewBoard) createBoard({ kind: 'web' });
+  const page: Page = {
+    id: crypto.randomUUID(),
+    image: null,
+    source: {
+      kind: 'html',
+      html,
+      title,
+      origin: opts.origin || origin,
+      allowExternal: opts.allowExternal,
+      width: 1280,
+      height: 800,
+    },
+  };
+  updateBoard((b) => ({
+    ...b,
+    title: isNewBoard && title ? title : b.title,
+    imageRole: 'draft',
+    pages: [...b.pages, page],
+  }));
+  activePageId.value = page.id;
 }

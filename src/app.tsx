@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'preact/hooks';
 import { activePageId, currentBoard, currentBoardId, ready, selectedSpotId, updateBoard } from './state';
 import { extractImageFiles } from './lib/image';
-import { handleFiles } from './lib/intake';
+import { handleFiles, handleHtml } from './lib/intake';
 import { Board } from './board/Board';
+import { HtmlBoard } from './board/HtmlBoard';
 import { Empty } from './panels/Empty';
 import { BoardPanel } from './panels/BoardPanel';
 import { SpotPanel } from './panels/SpotPanel';
@@ -10,14 +11,20 @@ import { LivePreview } from './panels/LivePreview';
 import { ExportDrawer } from './panels/ExportDrawer';
 import { RulesDrawer } from './panels/RulesDrawer';
 import { LibraryDrawer } from './panels/LibraryDrawer';
+import { HtmlIntakeDialog } from './panels/HtmlIntakeDialog';
 import markSmallUrl from '../brand/mark-small.svg';
 import type { Board as BoardData } from './schema';
 
 type DrawerKind = 'export' | 'rules' | 'library' | null;
 
+function droppedHtmlFile(dt: DataTransfer): File | null {
+  return Array.from(dt.files ?? []).find((f) => /\.html?$/i.test(f.name)) ?? null;
+}
+
 export function App() {
   const [drawer, setDrawer] = useState<DrawerKind>(null);
   const [dragOver, setDragOver] = useState(false);
+  const [htmlDialogOpen, setHtmlDialogOpen] = useState(false);
 
   useEffect(() => {
     function onPaste(e: ClipboardEvent) {
@@ -33,6 +40,7 @@ export function App() {
 
   const board = currentBoard.value;
   const spot = board?.spots.find((s) => s.id === selectedSpotId.value) ?? null;
+  const page = board?.pages.find((p) => p.id === activePageId.value) ?? null;
 
   return (
     <div
@@ -45,6 +53,11 @@ export function App() {
       onDrop={(e) => {
         e.preventDefault();
         setDragOver(false);
+        const htmlFile = droppedHtmlFile(e.dataTransfer!);
+        if (htmlFile) {
+          void htmlFile.text().then((raw) => handleHtml(raw, { allowExternal: false }));
+          return;
+        }
         void handleFiles(extractImageFiles(e.dataTransfer!));
       }}
     >
@@ -57,6 +70,7 @@ export function App() {
         <div class="topbar-spacer" />
         {board && (
           <>
+            <button class="btn-sm" onClick={() => setHtmlDialogOpen(true)}>HTMLを読み込む</button>
             <button class="btn-sm" onClick={() => setDrawer('rules')}>ルール</button>
             <button class="btn-sm" onClick={() => setDrawer('library')}>ライブラリ</button>
             <button class="btn" onClick={() => setDrawer('export')}>
@@ -68,11 +82,11 @@ export function App() {
       </header>
 
       {!board ? (
-        <Empty dragOver={dragOver} />
+        <Empty dragOver={dragOver} onOpenHtmlIntake={() => setHtmlDialogOpen(true)} />
       ) : (
         <main class="main-layout">
           <div class="board-column">
-            <Board />
+            {page?.source ? <HtmlBoard key={page.id} board={board} page={page} /> : <Board />}
             {board.pages.length > 1 && (
               <div class="page-strip">
                 {board.pages.map((p, i) => (
@@ -108,6 +122,7 @@ export function App() {
       {drawer === 'export' && board && <ExportDrawer board={board} onClose={() => setDrawer(null)} />}
       {drawer === 'rules' && board && <RulesDrawer board={board} onClose={() => setDrawer(null)} />}
       {drawer === 'library' && board && <LibraryDrawer board={board} onClose={() => setDrawer(null)} />}
+      {htmlDialogOpen && <HtmlIntakeDialog onClose={() => setHtmlDialogOpen(false)} />}
     </div>
   );
 }

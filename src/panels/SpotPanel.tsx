@@ -79,7 +79,9 @@ export function SpotPanel({ spot }: { spot: Spot }) {
   const colorNotes = spot.notes.filter((n): n is Extract<Note, { kind: 'color' }> => n.kind === 'color');
   function addColorNote() {
     const id = crypto.randomUUID();
-    const note: Note = { id, kind: 'color', target: '#000000' };
+    // HTMLページの箇所は、取り込み時に実測した文字色を「今の色」の初期値にする(スポイトの代わり)
+    const seedHex = spot.element?.computed.color;
+    const note: Note = { id, kind: 'color', target: seedHex ?? '#000000', current: seedHex };
     updateSpot((s) => ({ ...s, notes: [...s.notes, note] }));
     openColorNote(id);
   }
@@ -208,17 +210,38 @@ export function SpotPanel({ spot }: { spot: Spot }) {
 
       {!spot.keep && (
         <>
-          <div class="field">
-            <span class="field-label">位置・大きさ</span>
-            <div class="nudge-grid">
-              <button class="btn-sm" onClick={() => nudge(0, -NUDGE)}>上へ</button>
-              <button class="btn-sm" onClick={() => nudge(0, NUDGE)}>下へ</button>
-              <button class="btn-sm" onClick={() => nudge(-NUDGE, 0)}>左へ</button>
-              <button class="btn-sm" onClick={() => nudge(NUDGE, 0)}>右へ</button>
-              <button class="btn-sm" onClick={() => center('x')}>左右中央</button>
-              <button class="btn-sm" onClick={() => center('y')}>上下中央</button>
+          {spot.element && (
+            <div class="field">
+              <span class="field-label">要素</span>
+              <div class="element-info">
+                <code class="element-selector">{spot.element.selector}</code>
+                {spot.element.text && <span class="muted">「{spot.element.text}」</span>}
+              </div>
+              {Object.keys(spot.element.computed).length > 0 && (
+                <div class="element-computed">
+                  {Object.entries(spot.element.computed).map(([k, v]) => (
+                    <span key={k}>
+                      {k}: {v}
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
-          </div>
+          )}
+
+          {!spot.element && (
+            <div class="field">
+              <span class="field-label">位置・大きさ</span>
+              <div class="nudge-grid">
+                <button class="btn-sm" onClick={() => nudge(0, -NUDGE)}>上へ</button>
+                <button class="btn-sm" onClick={() => nudge(0, NUDGE)}>下へ</button>
+                <button class="btn-sm" onClick={() => nudge(-NUDGE, 0)}>左へ</button>
+                <button class="btn-sm" onClick={() => nudge(NUDGE, 0)}>右へ</button>
+                <button class="btn-sm" onClick={() => center('x')}>左右中央</button>
+                <button class="btn-sm" onClick={() => center('y')}>上下中央</button>
+              </div>
+            </div>
+          )}
 
           {/* 色 */}
           <div class="field">

@@ -16,10 +16,21 @@ export interface Rect {
   h: number;
 }
 
+export interface PageSource {
+  kind: 'html';
+  html: string; // サニタイズ済みのHTML全文
+  title?: string; // <title> の中身
+  origin?: string; // 元URL。ブックマークレット経由なら自動、貼り付けなら任意入力
+  allowExternal: boolean; // true のとき外部の画像・フォントの読み込みを許可する
+  width: number; // レンダリングの論理幅。既定 1280
+  height: number; // 読み込み後に実測した高さ
+}
+
 export interface Page {
   id: string;
   label?: string;
   image: { dataUrl: string; width: number; height: number } | null;
+  source?: PageSource; // 追加。undefined なら従来どおりの画像/白紙ページ
 }
 
 export type LadderAttr =
@@ -60,6 +71,26 @@ export type Note =
   | { id: string; kind: 'rule'; ruleRef: string }
   | { id: string; kind: 'text'; text: string; chips: string[] };
 
+/** 取り込み時点で実測した、出力と反映に使うCSSプロパティ。 */
+export type ComputedKey =
+  | 'font-size'
+  | 'font-weight'
+  | 'font-family'
+  | 'color'
+  | 'background-color'
+  | 'border-color'
+  | 'margin'
+  | 'padding'
+  | 'border-radius'
+  | 'border-width';
+
+export interface ElementRef {
+  selector: string; // 一意なCSSセレクタ
+  tag: string; // 'h1' など小文字のタグ名
+  text?: string; // textContent の先頭40文字
+  computed: Partial<Record<ComputedKey, string>>; // 取り込み時点の実測値
+}
+
 export interface Spot {
   id: string;
   pageId: string;
@@ -69,6 +100,7 @@ export interface Spot {
   targetRect?: Rect;
   keep: boolean;
   notes: Note[];
+  element?: ElementRef; // 追加。HTMLページで要素をクリックして作った箇所のみ持つ
 }
 
 export interface Rules {

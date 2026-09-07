@@ -27,6 +27,28 @@ export interface Page {
   id: string;
   label?: string;
   image: { dataUrl: string; width: number; height: number } | null;  // 白紙は null
+  source?: PageSource;   // HTMLページのときのみ。imageとは排他(HTMLページは image: null)
+}
+
+export interface PageSource {
+  kind: 'html';
+  html: string;             // サニタイズ済みのHTML全文(script等を除去済み)
+  title?: string;           // 取り込み時の <title>
+  origin?: string;          // 元URL。ブックマークレット経由なら自動、貼り付けなら任意入力
+  allowExternal: boolean;   // true のとき外部の画像・フォントの読み込みを許可する
+  width: number;            // レンダリングの論理幅。既定 1280
+  height: number;           // 読み込み後に実測した高さ
+}
+
+export type ComputedKey = 'font-size' | 'font-weight' | 'font-family'
+  | 'color' | 'background-color' | 'border-color'
+  | 'margin' | 'padding' | 'border-radius' | 'border-width';
+
+export interface ElementRef {
+  selector: string;         // 一意なCSSセレクタ
+  tag: string;               // 'h1' など小文字のタグ名
+  text?: string;              // textContent の先頭40文字
+  computed: Partial<Record<ComputedKey, string>>;  // 取り込み時点の実測値
 }
 
 export type LadderAttr = 'fontSize' | 'weight' | 'spacing' | 'radius'
@@ -52,6 +74,7 @@ export interface Spot {
   targetRect?: Rect;      // こうしたい位置・大きさ。draft のときのみ意味を持つ
   keep: boolean;
   notes: Note[];
+  element?: ElementRef;   // HTMLページで要素をクリックして作った箇所のみ持つ
 }
 
 export interface Rules {
@@ -95,7 +118,8 @@ export interface Library {
 
 ## JSON書き出し(「AIに渡す」→ JSON タブ)
 
-`Board` から `pages[].image.dataUrl` を除いたものです(`src/export.ts` の `boardToExportJson`)。
+`Board` から `pages[].image.dataUrl` と `pages[].source.html`(数百KBになり得る)を除いたものです
+(`src/export.ts` の `boardToExportJson`)。HTMLページの `title` / `origin` / `allowExternal` / `width` / `height` は残ります。
 
 ```json
 {
@@ -170,3 +194,31 @@ export interface Library {
 
 ページごとにPNGを1枚生成します(`renderNumberedImage`)。①②③の墨色バッジ、朱色点線の目標箱、
 中心から中心への矢印を元画像解像度で焼き込みます。バッジ径は画像幅の2.5%(最小24px)です。
+HTMLページはcanvasに焼けないため対象外です(`board.pages.every((p) => !p.image)` のとき、書き出しの
+「番号付き画像」タブ自体を出しません)。
+
+## HTMLページの指示文
+
+`page.source` があるページでは、前置き・ヘッダー・箇所の節がすべて専用の形式に変わります。
+`spot.element` を持つ箇所は、`rect` の%表記の代わりにCSSセレクタと実測値を使います。
+
+```markdown
+> 以下はWebページの修正指示です。各項目の `セレクタ` は、対象ページに対するCSSセレクタです。
+> 「現在」は取り込み時点の getComputedStyle の実測値です。
+> 「変えないもの」は現状維持してください。
+
+# デザイン指示: サービス紹介ページ
+
+- 対象: Webページ(https://example.com/)、レンダリング幅 1280px
+- 種類: コード修正指示(HTMLページに対して)
+
+## 箇所ごと
+### 1 見出し  `.hero > h1`
+- 要素: <h1> 「サービスの名前」
+- 文字サイズ: 32px → 24px(少し小さく)
+- 色: #e4572e → #c94a1d(落ち着かせる)
+```
+
+ラダーの `現在値 → 目標値` は `resolveLadder`(`src/lib/htmlCss.ts`)が、`element.computed` の実測値から
+最も近い段を探し、`delta` を足して解決します。`scale` / `speed` / `intensity` のように実測CSSへの
+対応がないラダー属性は、通常の画像ページと同じ相対ラベル表記(「少し小さく」など)にフォールバックします。

@@ -29,7 +29,7 @@ function onFileInputChange(e: Event) {
   input.value = '';
 }
 
-export function Empty({ dragOver }: { dragOver: boolean }) {
+export function Empty({ dragOver, onOpenHtmlIntake }: { dragOver: boolean; onOpenHtmlIntake: () => void }) {
   const boards = library.value.boards;
   const templates = library.value.templates;
 
@@ -49,6 +49,10 @@ export function Empty({ dragOver }: { dragOver: boolean }) {
           <p class="muted">Ctrl+V で貼り付け、またはクリックしてファイルを選ぶ</p>
           <input type="file" accept="image/*" multiple hidden onChange={onFileInputChange} />
         </label>
+
+        <button class="btn-sm" onClick={onOpenHtmlIntake}>
+          HTMLを読み込む
+        </button>
 
         <div class="empty-samples">
           <h2>まず触ってみる</h2>

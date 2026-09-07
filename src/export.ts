@@ -1,6 +1,7 @@
-import type { Board, ImageRole, Note, Rect, Rules, Spot } from './schema';
+import type { Board, ElementRef, ImageRole, Note, Rect, Rules, Spot } from './schema';
 import { COLOR_DIRECTIONS, COLOR_ROLES, FONT_MOODS, LADDER_TABLE, MOTIONS, RELATIVE_CHIPS } from './vocab';
 import { ruleRefOptions } from './lib/ruleRefs';
+import { resolveLadder } from './lib/htmlCss';
 
 const MOTION_TRIGGER_LABEL: Record<'enter' | 'hover' | 'transition', string> = {
   enter: '登場時',
@@ -25,6 +26,12 @@ const PREAMBLE = [
   '> 以下はデザインの修正指示です。①②③は添付画像上の番号付き領域を指します。',
   '> 位置と大きさは画像の左上を原点とし、画像の幅・高さに対する割合(%)で示します。',
   '> px換算は幅1280px基準です。「変えないもの」は現状維持してください。',
+].join('\n');
+
+const HTML_PREAMBLE = [
+  '> 以下はWebページの修正指示です。各項目の `セレクタ` は、対象ページに対するCSSセレクタです。',
+  '> 「現在」は取り込み時点の getComputedStyle の実測値です。',
+  '> 「変えないもの」は現状維持してください。',
 ].join('\n');
 
 function pct(v: number): string {
@@ -135,6 +142,7 @@ function layoutLine(spot: Spot, ctx: NoteCtx): string {
 }
 
 function spotSection(spot: Spot, ctx: NoteCtx): string {
+  if (spot.element) return htmlSpotSection(spot, spot.element, ctx);
   const lines = [`### ${spot.n} ${spot.label || `箇所${spot.n}`}(${rectLabel(spot.rect)})`];
   // targetRect の差分は draft(今の状態がある)ときだけ意味を持つ
   if (ctx.imageRole === 'draft') lines.push(...positionLines(spot));
@@ -142,17 +150,52 @@ function spotSection(spot: Spot, ctx: NoteCtx): string {
   return lines.join('\n');
 }
 
+function htmlSpotSection(spot: Spot, element: ElementRef, ctx: NoteCtx): string {
+  const lines = [`### ${spot.n} ${spot.label || `箇所${spot.n}`}  \`${element.selector}\``];
+  const textPart = element.text ? ` 「${element.text}」` : '';
+  lines.push(`- 要素: <${element.tag}>${textPart}`);
+  lines.push(...spot.notes.map((n) => formatHtmlNote(n, element, ctx)));
+  return lines.join('\n');
+}
+
+/** ラダー・色は実測値(element.computed)を使った「現在値 → 目標値」で出す。それ以外は既存のformatNoteと同じ形式。 */
+function formatHtmlNote(note: Note, element: ElementRef, ctx: NoteCtx): string {
+  if (note.kind === 'ladder') {
+    const def = LADDER_TABLE[note.attr];
+    const resolved = resolveLadder(note.attr, note, element.computed);
+    if (!resolved) return formatNote(note, ctx);
+    const from = resolved.from ? `${resolved.from} → ` : '';
+    const target = note.target;
+    const chip = 'delta' in target ? RELATIVE_CHIPS.find((c) => c.delta === target.delta) : undefined;
+    return `- ${def.label}: ${from}${resolved.to}${chip ? `(${chip.label})` : ''}`;
+  }
+  if (note.kind === 'color') {
+    const cssKey = note.role === 'bg' ? 'background-color' : note.role === 'line' ? 'border-color' : 'color';
+    const current = element.computed[cssKey];
+    const via = note.via ? COLOR_DIRECTIONS.find((d) => d.id === note.via)?.label : undefined;
+    const from = current ? `${current} → ` : '';
+    return `- 色: ${from}${note.target}${via ? `(${via})` : ''}`;
+  }
+  return formatNote(note, ctx);
+}
+
 export function boardToMarkdown(board: Board): string {
   const page = board.pages[0];
   const activeSpots = board.spots.filter((s) => !s.keep);
   const keptSpots = board.spots.filter((s) => s.keep);
-  const sizeLine = page?.image ? `、画像サイズ ${page.image.width}×${page.image.height}` : '';
-  const formatLabel =
-    board.format.kind === 'web' ? 'Web' : board.format.kind === 'slide' ? `スライド(${board.format.aspect})` : '白紙';
 
-  const parts: string[] = [PREAMBLE, '', `# デザイン指示: ${board.title}`, ''];
-  parts.push(`- 対象: ${formatLabel}${sizeLine}`);
-  parts.push(`- 種類: ${docKind(board)}`);
+  const parts: string[] = [page?.source ? HTML_PREAMBLE : PREAMBLE, '', `# デザイン指示: ${board.title}`, ''];
+  if (page?.source) {
+    const originPart = page.source.origin ? `(${page.source.origin})` : '';
+    parts.push(`- 対象: Webページ${originPart}、レンダリング幅 ${page.source.width}px`);
+    parts.push('- 種類: コード修正指示(HTMLページに対して)');
+  } else {
+    const sizeLine = page?.image ? `、画像サイズ ${page.image.width}×${page.image.height}` : '';
+    const formatLabel =
+      board.format.kind === 'web' ? 'Web' : board.format.kind === 'slide' ? `スライド(${board.format.aspect})` : '白紙';
+    parts.push(`- 対象: ${formatLabel}${sizeLine}`);
+    parts.push(`- 種類: ${docKind(board)}`);
+  }
   parts.push('');
 
   if (board.rules.palette.length || board.rules.type.length || board.rules.spacing !== undefined || board.rules.motion.length || board.rules.tone.length) {
@@ -218,11 +261,18 @@ export function boardToMarkdown(board: Board): string {
   return parts.join('\n').trimEnd() + '\n';
 }
 
-/** JSON書き出し用。画像データURLは含まない。 */
+/** JSON書き出し用。画像データURL・HTML本文(数百KBになり得る)は含まない。 */
 export function boardToExportJson(board: Board): unknown {
   return {
     ...board,
-    pages: board.pages.map((p) => ({ id: p.id, label: p.label, image: p.image ? { width: p.image.width, height: p.image.height } : null })),
+    pages: board.pages.map((p) => ({
+      id: p.id,
+      label: p.label,
+      image: p.image ? { width: p.image.width, height: p.image.height } : null,
+      ...(p.source
+        ? { source: { kind: p.source.kind, title: p.source.title, origin: p.source.origin, allowExternal: p.source.allowExternal, width: p.source.width, height: p.source.height } }
+        : {}),
+    })),
   };
 }
 

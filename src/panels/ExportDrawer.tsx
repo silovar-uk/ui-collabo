@@ -9,6 +9,7 @@ export function ExportDrawer({ board, onClose }: { board: Board; onClose: () => 
   const [tab, setTab] = useState<Tab>('markdown');
   const markdown = boardToMarkdown(board);
   const json = JSON.stringify(boardToExportJson(board), null, 2);
+  const hasImages = board.pages.some((p) => p.image);
 
   return (
     <Drawer
@@ -18,7 +19,9 @@ export function ExportDrawer({ board, onClose }: { board: Board; onClose: () => 
         <>
           <button class={`tab${tab === 'markdown' ? ' is-active' : ''}`} onClick={() => setTab('markdown')}>指示文</button>
           <button class={`tab${tab === 'json' ? ' is-active' : ''}`} onClick={() => setTab('json')}>JSON</button>
-          <button class={`tab${tab === 'images' ? ' is-active' : ''}`} onClick={() => setTab('images')}>番号付き画像</button>
+          {hasImages && (
+            <button class={`tab${tab === 'images' ? ' is-active' : ''}`} onClick={() => setTab('images')}>番号付き画像</button>
+          )}
         </>
       }
     >

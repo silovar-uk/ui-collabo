@@ -49,3 +49,33 @@
 - `brand/*.svg` をコンポーネントから `import` できるよう `src/vite-env.d.ts`(`/// <reference types="vite/client" />`)を追加した。D-4で計画されていた「`public/` へコピー」ではなく、vite標準のアセットimportを使う方式にした。base(`./`)がGitHub Pagesのサブパス配信のため、`public/` 直下を絶対パス参照するとデプロイ後にパスがずれる懸念があり、vite解決に任せた方が安全と判断した
 - C-4(指定一覧をパネル上部にまとめる表示)は計画書側で「余力があれば」の推奨扱いだったため、今回は見送った
 - 動作確認用に `.claude/launch.json` を追加した(コード本体ではなく開発ツール設定)。既存の別セッションが同名devサーバーを起動していたため、`autoPort: true` で衝突を避けるようにしている
+
+## HTMLページ取り込み(PLAN-HTML.md フェーズA〜E)
+
+- `test/domPick.test.ts` は実DOM上でのCSSセレクタの一意性判定(`querySelectorAll`)を検証する必要があり、
+  jsdomなしでは書けない。PLAN-HTML.mdの「新しい依存パッケージは追加しない」はREADMEの非目標(アプリ本体を
+  軽量に保つ)が主眼と判断し、devDependencyの`jsdom`のみ追加した(アプリのビルド成果物には含まれない)
+- ブックマークレットは、ビルド時最小化スクリプトを新設する代わりに、`public/bookmarklet.js`(可読なJS)を
+  Viteの`?raw`インポート(標準機能。新規依存なし)で`src/bookmarklet.ts`に読み込み、`javascript:`を
+  前置して使う方式にした。手打ちでエスケープした文字列定数より、実ファイルの方が壊れる余地がない
+- `HtmlBoard`の`#uic-preview`(こうしたいCSS)は、`</head>`の直前に挿入する。`<head>`の直後に置くと、
+  元ページの同じ詳細度のルール(例: `.hero h1`と`h1:nth-child(1)`はどちらも詳細度(0,1,1))に
+  カスケードの「後勝ち」で負けて反映されない。実機で発見し、挿入位置を`</head>`直前に修正した
+- HTMLページの高さ実測は、iframeの高さを一時的に`0px`に潰してから`scrollHeight`を読む。
+  `documentElement.scrollHeight`はiframe自身の表示高さを下限として返すため、潰さずに測ると
+  常に前回設定した高さ(初回は既定の800px)以上の値しか得られず、中身が短いページで縮まらない
+- 色ノートの追加時、`spot.element`があれば`element.computed.color`を`current`の初期値にする
+  (計画の出力例「#E4572E → #C94A1D(落ち着かせる)」は方向チップ由来で、方向チップは`current`が
+  ないと押せないため)。ただし`ColorPicker`の「今の色」表示欄自体は`hasImage`(画像ページ向け)で
+  出し分けており、HTMLページでは表示されない。方向チップは使えるが値の確認ができない、という
+  小さな見た目の粗さが残る。スポイトに相当する「今の色」欄をHTML要素向けに新設するのは計画の
+  明示要求を超えるため見送った
+- `Board.tsx`は計画で「触らない」指定のため、Escape/Delete/Backspace/Ctrl+Zのキー操作は`HtmlBoard.tsx`
+  側に同じ内容を再実装した(共有フックへの切り出しはBoard.tsxの変更を伴うため避けた)。矢印キーでの
+  移動は`spot.element`があると`getSpotEditTarget().apply`が何もしないため、あえて実装していない
+- `uniqueSelector`は id → タグ+単独class → 祖先を辿った合成(最大5階層、`:nth-child`混じり)→
+  全階層`:nth-child`の完全パス、の順に一意になった時点で確定する。5階層以内で一意にならない
+  巨大なDOMツリーでは、可読性より確実性を優先して完全パスにフォールバックする
+- `readComputed`は`margin`/`padding`/`border-radius`/`border-width`について、ブラウザの
+  shorthand computed値(4辺まとめ)ではなく、それぞれtop相当の1辺(`marginTop`等)だけを読む。
+  ラダーが単一の数値段階(px)を前提にしているため、4辺が異なる場合でも代表値1つに単純化した
