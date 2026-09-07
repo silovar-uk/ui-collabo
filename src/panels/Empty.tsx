@@ -1,6 +1,8 @@
+import { useState } from 'preact/hooks';
 import { cloneAndOpenBoard, createBoard, createFromTemplate, deleteBoard, deleteTemplate, library, openBoard, updateBoard } from '../state';
 import { handleFiles } from '../lib/intake';
 import { SAMPLES } from '../samples';
+import { HtmlIntakeDialog } from './HtmlIntakeDialog';
 import type { Format } from '../schema';
 import markUrl from '../../brand/mark.svg';
 
@@ -32,6 +34,7 @@ function onFileInputChange(e: Event) {
 export function Empty({ dragOver }: { dragOver: boolean }) {
   const boards = library.value.boards;
   const templates = library.value.templates;
+  const [showHtmlDialog, setShowHtmlDialog] = useState(false);
 
   return (
     <div class="empty-screen">
@@ -49,6 +52,9 @@ export function Empty({ dragOver }: { dragOver: boolean }) {
           <p class="muted">Ctrl+V で貼り付け、またはクリックしてファイルを選ぶ</p>
           <input type="file" accept="image/*" multiple hidden onChange={onFileInputChange} />
         </label>
+        <button class="btn-sm empty-html-btn" onClick={() => setShowHtmlDialog(true)}>
+          または、HTMLを読み込む
+        </button>
 
         <div class="empty-samples">
           <h2>まず触ってみる</h2>
@@ -122,6 +128,8 @@ export function Empty({ dragOver }: { dragOver: boolean }) {
           )}
         </details>
       )}
+
+      {showHtmlDialog && <HtmlIntakeDialog onClose={() => setShowHtmlDialog(false)} />}
     </div>
   );
 }

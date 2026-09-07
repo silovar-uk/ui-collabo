@@ -6,6 +6,7 @@ import type { Board } from '../schema';
 type Tab = 'markdown' | 'json' | 'images';
 
 export function ExportDrawer({ board, onClose }: { board: Board; onClose: () => void }) {
+  const hasAnyImage = board.pages.some((p) => p.image);
   const [tab, setTab] = useState<Tab>('markdown');
   const markdown = boardToMarkdown(board);
   const json = JSON.stringify(boardToExportJson(board), null, 2);
@@ -18,13 +19,15 @@ export function ExportDrawer({ board, onClose }: { board: Board; onClose: () => 
         <>
           <button class={`tab${tab === 'markdown' ? ' is-active' : ''}`} onClick={() => setTab('markdown')}>指示文</button>
           <button class={`tab${tab === 'json' ? ' is-active' : ''}`} onClick={() => setTab('json')}>JSON</button>
-          <button class={`tab${tab === 'images' ? ' is-active' : ''}`} onClick={() => setTab('images')}>番号付き画像</button>
+          {hasAnyImage && (
+            <button class={`tab${tab === 'images' ? ' is-active' : ''}`} onClick={() => setTab('images')}>番号付き画像</button>
+          )}
         </>
       }
     >
       {tab === 'markdown' && <TextTab content={markdown} />}
       {tab === 'json' && <TextTab content={json} />}
-      {tab === 'images' && <ImagesTab board={board} />}
+      {tab === 'images' && hasAnyImage && <ImagesTab board={board} />}
     </Drawer>
   );
 }

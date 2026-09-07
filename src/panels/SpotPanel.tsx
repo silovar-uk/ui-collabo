@@ -208,17 +208,32 @@ export function SpotPanel({ spot }: { spot: Spot }) {
 
       {!spot.keep && (
         <>
-          <div class="field">
-            <span class="field-label">位置・大きさ</span>
-            <div class="nudge-grid">
-              <button class="btn-sm" onClick={() => nudge(0, -NUDGE)}>上へ</button>
-              <button class="btn-sm" onClick={() => nudge(0, NUDGE)}>下へ</button>
-              <button class="btn-sm" onClick={() => nudge(-NUDGE, 0)}>左へ</button>
-              <button class="btn-sm" onClick={() => nudge(NUDGE, 0)}>右へ</button>
-              <button class="btn-sm" onClick={() => center('x')}>左右中央</button>
-              <button class="btn-sm" onClick={() => center('y')}>上下中央</button>
+          {spot.element ? (
+            <div class="field">
+              <span class="field-label">要素</span>
+              <p class="element-selector"><code>{spot.element.selector}</code></p>
+              {Object.keys(spot.element.computed).length > 0 && (
+                <ul class="element-computed">
+                  {Object.entries(spot.element.computed).map(([k, v]) => (
+                    <li key={k}><span class="muted">{k}</span>: {v}</li>
+                  ))}
+                </ul>
+              )}
+              <p class="muted">位置は余白(margin)の指定で動かせます。</p>
             </div>
-          </div>
+          ) : (
+            <div class="field">
+              <span class="field-label">位置・大きさ</span>
+              <div class="nudge-grid">
+                <button class="btn-sm" onClick={() => nudge(0, -NUDGE)}>上へ</button>
+                <button class="btn-sm" onClick={() => nudge(0, NUDGE)}>下へ</button>
+                <button class="btn-sm" onClick={() => nudge(-NUDGE, 0)}>左へ</button>
+                <button class="btn-sm" onClick={() => nudge(NUDGE, 0)}>右へ</button>
+                <button class="btn-sm" onClick={() => center('x')}>左右中央</button>
+                <button class="btn-sm" onClick={() => center('y')}>上下中央</button>
+              </div>
+            </div>
+          )}
 
           {/* 色 */}
           <div class="field">

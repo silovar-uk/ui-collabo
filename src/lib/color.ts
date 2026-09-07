@@ -51,6 +51,15 @@ function rgbToHsl(r: number, g: number, b: number): Hsl {
   return [h, s * 100, l * 100];
 }
 
+/** `rgb(r, g, b)` / `rgba(r, g, b, a)` を hex に変換する。透明(alpha 0)や解析不能な値は null。 */
+export function rgbStringToHex(rgb: string): string | null {
+  const m = /rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)(?:\s*[,/]\s*([\d.]+))?\s*\)/.exec(rgb);
+  if (!m) return null;
+  const [, r, g, b, a] = m;
+  if (a !== undefined && Number(a) === 0) return null;
+  return rgbToHex(Number(r), Number(g), Number(b));
+}
+
 function hslToRgb(h: number, s: number, l: number): [number, number, number] {
   s /= 100;
   l /= 100;

@@ -60,7 +60,11 @@ export function LivePreview({ board, selectedN }: { board: Board; selectedN: num
             </pre>
           </>
         ) : (
-          <p class="muted">画像の上をドラッグして、気になる箇所を囲んでください。</p>
+          <p class="muted">
+            {board.pages.some((p) => p.source)
+              ? '要素をクリックして、気になる箇所を選んでください。'
+              : '画像の上をドラッグして、気になる箇所を囲んでください。'}
+          </p>
         )}
       </div>
     </details>
