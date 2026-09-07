@@ -3,15 +3,20 @@ import { colorPickRequest, currentBoard, selectedSpotId, updateBoard } from '../
 import { getSpotEditTarget } from '../lib/spotTarget';
 import { clampRect } from '../lib/geometry';
 import { ruleRefOptions } from '../lib/ruleRefs';
-import { LADDER_ATTRS, LADDER_TABLE, TONE_CHIPS } from '../vocab';
+import { COLOR_ROLES, LADDER_ATTRS, LADDER_TABLE, TONE_CHIPS } from '../vocab';
 import { Ladder } from '../pickers/Ladder';
 import { ColorPicker } from '../pickers/ColorPicker';
 import { FontPicker } from '../pickers/FontPicker';
 import { MotionPicker } from '../pickers/MotionPicker';
-import type { LadderAttr, Note, Spot } from '../schema';
+import type { LadderAttr, Note, Rules, Spot } from '../schema';
 
 const NUDGE = 0.02;
-type Adder = 'font' | 'motion' | { ladder: LadderAttr } | null;
+type Adder = 'font' | 'motion' | 'ladder-menu' | { ladder: LadderAttr } | null;
+
+/** 「このボードの基準にする」をデフォルトで開くかどうか。既にルールがあるボードでは開く。 */
+function hasAnyRules(rules: Rules): boolean {
+  return rules.palette.length > 0 || rules.type.length > 0 || rules.spacing !== undefined || rules.motion.length > 0 || rules.tone.length > 0;
+}
 const TYPE_ROLES: { id: 'heading' | 'body' | 'caption'; label: string }[] = [
   { id: 'heading', label: '見出し' },
   { id: 'body', label: '本文' },
@@ -22,6 +27,17 @@ export function SpotPanel({ spot }: { spot: Spot }) {
   const labelRef = useRef<HTMLInputElement>(null);
   const board = currentBoard.value!;
   const [adder, setAdder] = useState<Adder>(null);
+  const [openColorIds, setOpenColorIds] = useState<Set<string>>(new Set());
+  function openColorNote(id: string) {
+    setOpenColorIds((prev) => new Set(prev).add(id));
+  }
+  function closeColorNote(id: string) {
+    setOpenColorIds((prev) => {
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+  }
 
   useEffect(() => {
     if (!spot.label) labelRef.current?.focus();
@@ -62,8 +78,10 @@ export function SpotPanel({ spot }: { spot: Spot }) {
   // --- 色(1スポットにつき複数可) ---
   const colorNotes = spot.notes.filter((n): n is Extract<Note, { kind: 'color' }> => n.kind === 'color');
   function addColorNote() {
-    const note: Note = { id: crypto.randomUUID(), kind: 'color', target: '#000000' };
+    const id = crypto.randomUUID();
+    const note: Note = { id, kind: 'color', target: '#000000' };
     updateSpot((s) => ({ ...s, notes: [...s.notes, note] }));
+    openColorNote(id);
   }
   function patchColorNote(id: string, patch: Partial<Extract<Note, { kind: 'color' }>>) {
     updateSpot((s) => ({ ...s, notes: s.notes.map((n) => (n.id === id && n.kind === 'color' ? { ...n, ...patch } : n)) }));
@@ -205,22 +223,44 @@ export function SpotPanel({ spot }: { spot: Spot }) {
           {/* 色 */}
           <div class="field">
             <span class="field-label">色</span>
-            {colorNotes.map((note) => (
-              <div class="note-block" key={note.id}>
-                <ColorPicker
-                  value={note}
-                  imageRole={board.imageRole}
-                  hasImage={hasImage}
-                  rulesPalette={board.rules.palette.map((p) => ({ role: p.role, hex: p.hex }))}
-                  onChange={(patch) => patchColorNote(note.id, patch)}
-                  onRequestPick={() => requestColorPick(note.id)}
-                />
-                <div class="chip-row">
-                  <button class="btn-sm" onClick={() => promoteColorToRule(note)}>ルールにする</button>
-                  <button class="btn-sm" onClick={() => removeNote(note.id)}>この色指定を削除</button>
+            {colorNotes.map((note) => {
+              const isOpen = openColorIds.has(note.id);
+              return (
+                <div class="note-block" key={note.id}>
+                  {isOpen ? (
+                    <>
+                      <ColorPicker
+                        value={note}
+                        imageRole={board.imageRole}
+                        hasImage={hasImage}
+                        rulesPalette={board.rules.palette.map((p) => ({ role: p.role, hex: p.hex }))}
+                        onChange={(patch) => patchColorNote(note.id, patch)}
+                        onRequestPick={() => requestColorPick(note.id)}
+                      />
+                      <div class="chip-row">
+                        <button class="btn-sm" onClick={() => closeColorNote(note.id)}>閉じる</button>
+                        <button class="btn-sm" onClick={() => removeNote(note.id)}>この色指定を削除</button>
+                      </div>
+                      <details class="note-details" open={hasAnyRules(board.rules)}>
+                        <summary>このボードの基準にする</summary>
+                        <button class="btn-sm" onClick={() => promoteColorToRule(note)}>基準にする</button>
+                      </details>
+                    </>
+                  ) : (
+                    <div class="note-summary-row">
+                      <span class="swatch" style={{ background: note.target }} />
+                      <span class="note-summary-text">
+                        {note.current ? `${note.current} → ` : ''}
+                        {note.target}
+                        {note.role ? `(${COLOR_ROLES.find((r) => r.id === note.role)?.label ?? note.role})` : ''}
+                      </span>
+                      <button class="btn-sm" onClick={() => openColorNote(note.id)}>編集</button>
+                      <button class="btn-sm" onClick={() => removeNote(note.id)}>×</button>
+                    </div>
+                  )}
                 </div>
-              </div>
-            ))}
+              );
+            })}
             <button class="btn-sm" onClick={addColorNote}>＋ 色を指定する</button>
           </div>
 
@@ -235,32 +275,39 @@ export function SpotPanel({ spot }: { spot: Spot }) {
               </button>
             )}
             {fontNote && (
-              <div class="chip-row">
-                <span class="field-label">ルールにする:</span>
-                {TYPE_ROLES.map((r) => (
-                  <button key={r.id} class="btn-sm" onClick={() => promoteFontToRule(r.id)}>{r.label}に</button>
-                ))}
-              </div>
+              <details class="note-details" open={hasAnyRules(board.rules)}>
+                <summary>このボードの基準にする</summary>
+                <div class="chip-row">
+                  {TYPE_ROLES.map((r) => (
+                    <button key={r.id} class="btn-sm" onClick={() => promoteFontToRule(r.id)}>{r.label}に</button>
+                  ))}
+                </div>
+              </details>
             )}
           </div>
 
-          {/* 量(ラダー) */}
+          {/* 大きさ・余白・形(ラダー) */}
           <div class="field">
-            <span class="field-label">量(文字サイズ・余白・角丸など)</span>
+            <span class="field-label">大きさ・余白・形</span>
             {LADDER_ATTRS.filter((attr) => getLadderNote(attr)).map((attr) => (
               <div class="note-block" key={attr}>
                 <span class="field-label">{LADDER_TABLE[attr].label}</span>
                 <Ladder attr={attr} value={getLadderNote(attr)!} onChange={(v) => setLadder(attr, v)} />
                 {attr === 'fontSize' && fontSizeNote && 'step' in fontSizeNote.target && (
-                  <div class="chip-row">
-                    <span class="field-label">ルールにする:</span>
-                    {TYPE_ROLES.map((r) => (
-                      <button key={r.id} class="btn-sm" onClick={() => promoteFontSizeToRule(r.id)}>{r.label}に</button>
-                    ))}
-                  </div>
+                  <details class="note-details" open={hasAnyRules(board.rules)}>
+                    <summary>このボードの基準にする</summary>
+                    <div class="chip-row">
+                      {TYPE_ROLES.map((r) => (
+                        <button key={r.id} class="btn-sm" onClick={() => promoteFontSizeToRule(r.id)}>{r.label}に</button>
+                      ))}
+                    </div>
+                  </details>
                 )}
                 {attr === 'spacing' && spacingNote && 'step' in spacingNote.target && (
-                  <button class="btn-sm" onClick={promoteSpacingToRule}>余白のルールにする</button>
+                  <details class="note-details" open={hasAnyRules(board.rules)}>
+                    <summary>このボードの基準にする</summary>
+                    <button class="btn-sm" onClick={promoteSpacingToRule}>余白を基準にする</button>
+                  </details>
                 )}
                 <button
                   class="btn-sm"
@@ -274,7 +321,7 @@ export function SpotPanel({ spot }: { spot: Spot }) {
               <div class="note-block">
                 <Ladder attr={adder.ladder} value={{ target: { step: 0 } }} onChange={(v) => { setLadder(adder.ladder, v); setAdder(null); }} />
               </div>
-            ) : (
+            ) : adder === 'ladder-menu' ? (
               <div class="chip-row">
                 {LADDER_ATTRS.filter((attr) => !getLadderNote(attr)).map((attr) => (
                   <button key={attr} class="btn-sm" onClick={() => setAdder({ ladder: attr })}>
@@ -282,6 +329,10 @@ export function SpotPanel({ spot }: { spot: Spot }) {
                   </button>
                 ))}
               </div>
+            ) : (
+              LADDER_ATTRS.some((attr) => !getLadderNote(attr)) && (
+                <button class="btn-sm" onClick={() => setAdder('ladder-menu')}>＋ 大きさ・余白・形を指定する</button>
+              )
             )}
           </div>
 
@@ -298,7 +349,12 @@ export function SpotPanel({ spot }: { spot: Spot }) {
                 {motionNote ? '動きを変更する' : '＋ 動きをつける'}
               </button>
             )}
-            {motionNote && <button class="btn-sm" onClick={promoteMotionToRule}>ルールにする</button>}
+            {motionNote && (
+              <details class="note-details" open={hasAnyRules(board.rules)}>
+                <summary>このボードの基準にする</summary>
+                <button class="btn-sm" onClick={promoteMotionToRule}>基準にする</button>
+              </details>
+            )}
           </div>
 
           {/* ルールに合わせる */}
@@ -310,6 +366,7 @@ export function SpotPanel({ spot }: { spot: Spot }) {
                   <button
                     key={opt.ref}
                     class={`chip${ruleNotes.some((n) => n.ruleRef === opt.ref) ? ' is-active' : ''}`}
+                    aria-pressed={ruleNotes.some((n) => n.ruleRef === opt.ref)}
                     onClick={() => toggleRuleNote(opt.ref)}
                   >
                     {opt.label}
@@ -330,6 +387,7 @@ export function SpotPanel({ spot }: { spot: Spot }) {
               <button
                 key={chip}
                 class={`chip${active ? ' is-active' : ''}`}
+                aria-pressed={active}
                 onClick={() =>
                   updateTextNote((n) => ({ ...n, chips: active ? n.chips.filter((c) => c !== chip) : [...n.chips, chip] }))
                 }

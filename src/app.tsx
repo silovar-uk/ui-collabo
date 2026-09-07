@@ -1,37 +1,23 @@
 import { useEffect, useState } from 'preact/hooks';
-import { activePageId, createBoard, currentBoard, currentBoardId, ready, selectedSpotId, updateBoard } from './state';
-import { extractImageFiles, fileToImage } from './lib/image';
+import { activePageId, currentBoard, currentBoardId, ready, selectedSpotId, updateBoard } from './state';
+import { extractImageFiles } from './lib/image';
+import { handleFiles } from './lib/intake';
 import { Board } from './board/Board';
 import { Empty } from './panels/Empty';
 import { BoardPanel } from './panels/BoardPanel';
 import { SpotPanel } from './panels/SpotPanel';
+import { LivePreview } from './panels/LivePreview';
 import { ExportDrawer } from './panels/ExportDrawer';
 import { RulesDrawer } from './panels/RulesDrawer';
 import { LibraryDrawer } from './panels/LibraryDrawer';
-import type { Page } from './schema';
+import markSmallUrl from '../brand/mark-small.svg';
+import type { Board as BoardData } from './schema';
 
 type DrawerKind = 'export' | 'rules' | 'library' | null;
-
-async function filesToPages(files: File[]): Promise<Page[]> {
-  const pages: Page[] = [];
-  for (const file of files) {
-    const img = await fileToImage(file);
-    pages.push({ id: crypto.randomUUID(), image: img });
-  }
-  return pages;
-}
 
 export function App() {
   const [drawer, setDrawer] = useState<DrawerKind>(null);
   const [dragOver, setDragOver] = useState(false);
-
-  async function handleFiles(files: File[]) {
-    if (files.length === 0) return;
-    const pages = await filesToPages(files);
-    if (!currentBoard.value) createBoard({ kind: 'web' });
-    updateBoard((b) => ({ ...b, pages: [...b.pages, ...pages] }));
-    activePageId.value = pages[0].id;
-  }
 
   useEffect(() => {
     function onPaste(e: ClipboardEvent) {
@@ -64,6 +50,7 @@ export function App() {
     >
       <header class="topbar">
         <button class="wordmark" onClick={() => (currentBoardId.value = null)} title="ボード一覧に戻る">
+          <img class="wordmark-mark" src={markSmallUrl} alt="" width={20} height={20} />
           UI ColLabo
         </button>
         {board && <span class="topbar-title">{board.title}</span>}
@@ -72,13 +59,16 @@ export function App() {
           <>
             <button class="btn-sm" onClick={() => setDrawer('rules')}>ルール</button>
             <button class="btn-sm" onClick={() => setDrawer('library')}>ライブラリ</button>
-            <button class="btn" onClick={() => setDrawer('export')}>AIに渡す</button>
+            <button class="btn" onClick={() => setDrawer('export')}>
+              AIに渡す
+              {specifiedSpotCount(board) > 0 && <span class="btn-badge">{specifiedSpotCount(board)}</span>}
+            </button>
           </>
         )}
       </header>
 
       {!board ? (
-        <Empty />
+        <Empty dragOver={dragOver} />
       ) : (
         <main class="main-layout">
           <div class="board-column">
@@ -101,13 +91,16 @@ export function App() {
             )}
           </div>
           <aside class="side-panel">
-            {board.imageRole === null && board.pages.some((p) => p.image) ? (
-              <ImageRolePrompt />
-            ) : spot ? (
-              <SpotPanel spot={spot} />
-            ) : (
-              <BoardPanel />
-            )}
+            <div class="side-panel-top">
+              {board.imageRole === null && board.pages.some((p) => p.image) ? (
+                <ImageRolePrompt />
+              ) : spot ? (
+                <SpotPanel spot={spot} />
+              ) : (
+                <BoardPanel />
+              )}
+            </div>
+            <LivePreview board={board} selectedN={spot?.n ?? null} />
           </aside>
         </main>
       )}
@@ -117,6 +110,11 @@ export function App() {
       {drawer === 'library' && board && <LibraryDrawer board={board} onClose={() => setDrawer(null)} />}
     </div>
   );
+}
+
+/** 「AIに渡す」の進捗バッジ用。1つ以上ノートを持つか、残す指定がある箇所の数。 */
+function specifiedSpotCount(board: BoardData): number {
+  return board.spots.filter((s) => s.notes.length > 0 || s.keep).length;
 }
 
 function ImageRolePrompt() {

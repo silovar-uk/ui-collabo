@@ -33,7 +33,7 @@ export function RulesDrawer({ board, onClose }: { board: Board; onClose: () => v
   }
 
   return (
-    <Drawer onClose={onClose} header={<span class="tab is-active">ルール</span>}>
+    <Drawer onClose={onClose} ariaLabel="ルール" header={<span class="tab is-active">ルール</span>}>
       <div class="drawer-body">
         <div class="field">
           <span class="field-label">色</span>

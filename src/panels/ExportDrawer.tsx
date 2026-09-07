@@ -13,6 +13,7 @@ export function ExportDrawer({ board, onClose }: { board: Board; onClose: () => 
   return (
     <Drawer
       onClose={onClose}
+      ariaLabel="AIに渡す"
       header={
         <>
           <button class={`tab${tab === 'markdown' ? ' is-active' : ''}`} onClick={() => setTab('markdown')}>指示文</button>

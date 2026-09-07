@@ -38,3 +38,14 @@
 - README冒頭のスクリーンショット画像は、実機キャプチャをリポジトリに保存する手段が今回のセッションになかったため見送った。ロゴ(`brand/logo.svg`)とテキストでの使い方説明のみ掲載している。あとで実際のスクリーンショットを `docs/screenshot.png` として追加し、README側のimgタグを復活させると良い
 - `scripts/render-assets.mjs` はビルドパイプライン(`npm run build`)には組み込まず、`npm run assets` で手動実行する独立スクリプトとした。ブランド資産はほぼ変更されないため、毎回のCIビルドで画像生成に時間をかける必要はないと判断
 - サンプル2件は `src/samples.ts` に埋め込んだままとし、`public/samples/*.json` への切り出しは行わなかった(Phase3の判断を継続)。動作上の差はなく、切り出しは将来の見直し候補として残す
+
+## UI改善(PLAN-UI.md フェーズA〜E)
+
+- LivePreview(`src/panels/LivePreview.tsx`)の高さ制限は、PLAN-UI.md 記載の `max-height: 40%` ではなく `40vh` を採用した。`.side-panel` の2段グリッドは行が `auto` サイズのため、子要素へのパーセント指定の基準が定まらず機能しない。ビューポート高基準の `vh` なら常に確定値になり、意図(画面の4割程度に収める)も達成できる
+- `.live-preview` に `overflow: hidden` を追加し、`.live-preview-body` に `flex: 1; min-height: 0;` を追加した。付けないと `display:flex` 内の `overflow:auto` 子要素が内容の実サイズまで伸び、ページ全体が縦スクロールしてしまう(flexboxの既知の挙動)。ブラウザ実機確認で発見して修正した
+- フェーズB-3の「`.app-shell.is-drag-over` の見せ方を強くする」は、実装上はApp側の `dragOver` ステートを `Empty` へpropとして渡し、`.empty-dropzone.is-drag-over` に直接スタイルを当てる形にした。ドロップ処理自体は既存どおりApp最上位の1箇所に残し、二重登録によるファイル二重取り込みを避けている
+- C-3「このボードの基準にする」の`<details>`初期開閉は、対象ノート種別ごとの既存ルール有無ではなく、ボード全体に何かルールが1つでもあるか(`hasAnyRules`)で判定を統一した。属性ごとに判定を分けても体験差が薄く、実装も煩雑になるため
+- D-2で `.ladder-thumb.is-target` を朱塗りにしたことに伴い、動きの強さ(intensity)メーターの「埋まっているバー」(`--vermilion`)が背景と同化して見えなくなる副作用があった。`is-target` の中だけ埋まっているバーを `--ink` にする例外を追加して解消した
+- `brand/*.svg` をコンポーネントから `import` できるよう `src/vite-env.d.ts`(`/// <reference types="vite/client" />`)を追加した。D-4で計画されていた「`public/` へコピー」ではなく、vite標準のアセットimportを使う方式にした。base(`./`)がGitHub Pagesのサブパス配信のため、`public/` 直下を絶対パス参照するとデプロイ後にパスがずれる懸念があり、vite解決に任せた方が安全と判断した
+- C-4(指定一覧をパネル上部にまとめる表示)は計画書側で「余力があれば」の推奨扱いだったため、今回は見送った
+- 動作確認用に `.claude/launch.json` を追加した(コード本体ではなく開発ツール設定)。既存の別セッションが同名devサーバーを起動していたため、`autoPort: true` で衝突を避けるようにしている

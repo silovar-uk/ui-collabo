@@ -28,10 +28,18 @@ export function BoardPanel() {
         <div class="field">
           <span class="field-label">この画像は?</span>
           <div class="chip-row">
-            <button class={`chip${board.imageRole === 'draft' ? ' is-active' : ''}`} onClick={() => updateBoard((b) => ({ ...b, imageRole: 'draft' }))}>
+            <button
+              class={`chip${board.imageRole === 'draft' ? ' is-active' : ''}`}
+              aria-pressed={board.imageRole === 'draft'}
+              onClick={() => updateBoard((b) => ({ ...b, imageRole: 'draft' }))}
+            >
               直したいもの
             </button>
-            <button class={`chip${board.imageRole === 'reference' ? ' is-active' : ''}`} onClick={() => updateBoard((b) => ({ ...b, imageRole: 'reference' }))}>
+            <button
+              class={`chip${board.imageRole === 'reference' ? ' is-active' : ''}`}
+              aria-pressed={board.imageRole === 'reference'}
+              onClick={() => updateBoard((b) => ({ ...b, imageRole: 'reference' }))}
+            >
               参考にしたいもの
             </button>
           </div>
@@ -42,7 +50,12 @@ export function BoardPanel() {
         <span class="field-label">全体のひとこと</span>
         <div class="chip-row">
           {TONE_CHIPS.map((chip) => (
-            <button key={chip} class={`chip${board.tone.chips.includes(chip) ? ' is-active' : ''}`} onClick={() => toggleChip(chip)}>
+            <button
+              key={chip}
+              class={`chip${board.tone.chips.includes(chip) ? ' is-active' : ''}`}
+              aria-pressed={board.tone.chips.includes(chip)}
+              onClick={() => toggleChip(chip)}
+            >
               {chip}
             </button>
           ))}

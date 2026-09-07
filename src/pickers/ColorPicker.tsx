@@ -47,6 +47,7 @@ export function ColorPicker({ value: note, imageRole, hasImage, rulesPalette, on
                 <button
                   key={dir.id}
                   class={`chip${note.via === dir.id ? ' is-active' : ''}`}
+                  aria-pressed={note.via === dir.id}
                   disabled={disabled}
                   title={disabled ? '先に「今の色」を拾ってください' : ''}
                   onClick={() => {

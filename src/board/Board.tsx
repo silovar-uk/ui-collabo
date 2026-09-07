@@ -29,6 +29,7 @@ export function Board() {
   const board = currentBoard.value;
   const containerRef = useRef<HTMLDivElement>(null);
   const [draftPx, setDraftPx] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
+  const [justCreatedId, setJustCreatedId] = useState<string | null>(null);
   const drag = useRef<{ mode: 'create' | 'move' | 'resize'; startX: number; startY: number; handle?: Handle; base?: Rect } | null>(null);
   const [, force] = useState(0);
 
@@ -126,6 +127,8 @@ export function Board() {
     const spot: Spot = { id: crypto.randomUUID(), pageId: page!.id, n, label: '', rect: ratio, keep: false, notes: [] };
     updateBoard((b) => ({ ...b, spots: [...b.spots, spot] }));
     selectedSpotId.value = spot.id;
+    setJustCreatedId(spot.id);
+    setTimeout(() => setJustCreatedId((cur) => (cur === spot.id ? null : cur)), 220);
   }
 
   function startBoxDrag(e: PointerEvent, spot: Spot, handle?: Handle) {
@@ -184,6 +187,7 @@ export function Board() {
             spot={spot}
             cr={getCr()}
             selected={selectedSpotId.value === spot.id}
+            justCreated={justCreatedId === spot.id}
             orderIndex={orderMode.value ? board.order.indexOf(spot.id) : -1}
             onSelect={() => {
               if (orderMode.value) {

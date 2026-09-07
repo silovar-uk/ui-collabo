@@ -38,7 +38,7 @@ export function LibraryDrawer({ board, onClose }: { board: Board; onClose: () =>
   }
 
   return (
-    <Drawer onClose={onClose} header={<span class="tab is-active">ライブラリ</span>}>
+    <Drawer onClose={onClose} ariaLabel="ライブラリ" header={<span class="tab is-active">ライブラリ</span>}>
       <div class="drawer-body">
         <div class="field">
           <span class="field-label">保存したルール</span>
