@@ -1,6 +1,7 @@
-import type { Board, ImageRole, Note, Rect, Rules, Spot } from './schema';
-import { COLOR_DIRECTIONS, COLOR_ROLES, FONT_MOODS, LADDER_TABLE, MOTIONS, RELATIVE_CHIPS } from './vocab';
+import type { Board, ElementRef, ImageRole, Note, Rect, Rules, Spot } from './schema';
+import { COLOR_DIRECTIONS, COLOR_ROLES, FONT_MOODS, LADDER_TABLE, MOTIONS, RELATIVE_CHIPS, stepLabel } from './vocab';
 import { ruleRefOptions } from './lib/ruleRefs';
+import { COLOR_PROP, LADDER_PROP, resolveLadder } from './lib/htmlCss';
 
 const MOTION_TRIGGER_LABEL: Record<'enter' | 'hover' | 'transition', string> = {
   enter: '登場時',
@@ -25,6 +26,12 @@ const PREAMBLE = [
   '> 以下はデザインの修正指示です。①②③は添付画像上の番号付き領域を指します。',
   '> 位置と大きさは画像の左上を原点とし、画像の幅・高さに対する割合(%)で示します。',
   '> px換算は幅1280px基準です。「変えないもの」は現状維持してください。',
+].join('\n');
+
+const HTML_PREAMBLE = [
+  '> 以下はWebページの修正指示です。各項目の `セレクタ` は、対象ページに対するCSSセレクタです。',
+  '> 「現在」は取り込み時点の getComputedStyle の実測値です。',
+  '> 「変えないもの」は現状維持してください。',
 ].join('\n');
 
 function pct(v: number): string {
@@ -135,6 +142,7 @@ function layoutLine(spot: Spot, ctx: NoteCtx): string {
 }
 
 function spotSection(spot: Spot, ctx: NoteCtx): string {
+  if (spot.element) return htmlSpotSection(spot, spot.element, ctx);
   const lines = [`### ${spot.n} ${spot.label || `箇所${spot.n}`}(${rectLabel(spot.rect)})`];
   // targetRect の差分は draft(今の状態がある)ときだけ意味を持つ
   if (ctx.imageRole === 'draft') lines.push(...positionLines(spot));
@@ -142,17 +150,57 @@ function spotSection(spot: Spot, ctx: NoteCtx): string {
   return lines.join('\n');
 }
 
+/** HTMLページの箇所の節。矩形は出さず、セレクタと実測値(現在→目標)を出す。 */
+function htmlSpotSection(spot: Spot, el: ElementRef, ctx: NoteCtx): string {
+  const lines = [`### ${spot.n} ${spot.label || `箇所${spot.n}`}  \`${el.selector}\``];
+  lines.push(`- 要素: <${el.tag}>${el.text ? ` 「${el.text}」` : ''}`);
+  lines.push(...spot.notes.map((n) => formatElementNote(n, el, ctx)));
+  return lines.join('\n');
+}
+
+function formatElementNote(note: Note, el: ElementRef, ctx: NoteCtx): string {
+  if (note.kind === 'ladder') {
+    const def = LADDER_TABLE[note.attr];
+    const prop = LADDER_PROP[note.attr];
+    const resolved = prop ? resolveLadder(note.attr, note, el.computed[prop]) : null;
+    const target = note.target;
+    const deltaLabel = 'delta' in target ? RELATIVE_CHIPS.find((c) => c.delta === target.delta)?.label : undefined;
+    if (!resolved || !resolved.from) {
+      const to = 'step' in target ? stepLabel(def, target.step) : (deltaLabel ?? '');
+      return `- ${def.label}: ${to}`;
+    }
+    const suffix = deltaLabel ? `(${deltaLabel})` : '';
+    return `- ${def.label}: ${resolved.from} → ${resolved.to}${suffix}`;
+  }
+  if (note.kind === 'color') {
+    const prop = COLOR_PROP[note.role ?? 'accent'];
+    const current = el.computed[prop];
+    if (current) {
+      const via = note.via ? COLOR_DIRECTIONS.find((d) => d.id === note.via)?.label : undefined;
+      return `- 色: ${current} → ${note.target}${via ? `(${via})` : ''}`;
+    }
+  }
+  return formatNote(note, ctx);
+}
+
 export function boardToMarkdown(board: Board): string {
   const page = board.pages[0];
   const activeSpots = board.spots.filter((s) => !s.keep);
   const keptSpots = board.spots.filter((s) => s.keep);
+  const source = page?.source;
   const sizeLine = page?.image ? `、画像サイズ ${page.image.width}×${page.image.height}` : '';
   const formatLabel =
     board.format.kind === 'web' ? 'Web' : board.format.kind === 'slide' ? `スライド(${board.format.aspect})` : '白紙';
 
-  const parts: string[] = [PREAMBLE, '', `# デザイン指示: ${board.title}`, ''];
-  parts.push(`- 対象: ${formatLabel}${sizeLine}`);
-  parts.push(`- 種類: ${docKind(board)}`);
+  const parts: string[] = [source ? HTML_PREAMBLE : PREAMBLE, '', `# デザイン指示: ${board.title}`, ''];
+  if (source) {
+    const originPart = source.origin ? `(${source.origin})` : '';
+    parts.push(`- 対象: Webページ${originPart}、レンダリング幅 ${source.width}px`);
+    parts.push('- 種類: コード修正指示(HTMLページに対して)');
+  } else {
+    parts.push(`- 対象: ${formatLabel}${sizeLine}`);
+    parts.push(`- 種類: ${docKind(board)}`);
+  }
   parts.push('');
 
   if (board.rules.palette.length || board.rules.type.length || board.rules.spacing !== undefined || board.rules.motion.length || board.rules.tone.length) {
@@ -222,7 +270,12 @@ export function boardToMarkdown(board: Board): string {
 export function boardToExportJson(board: Board): unknown {
   return {
     ...board,
-    pages: board.pages.map((p) => ({ id: p.id, label: p.label, image: p.image ? { width: p.image.width, height: p.image.height } : null })),
+    pages: board.pages.map((p) => ({
+      id: p.id,
+      label: p.label,
+      image: p.image ? { width: p.image.width, height: p.image.height } : null,
+      source: p.source ? { kind: p.source.kind, title: p.source.title, origin: p.source.origin, width: p.source.width, height: p.source.height } : undefined,
+    })),
   };
 }
 

@@ -1014,4 +1014,99 @@ button {
   animation-timing-function: ease-in-out;
 }
 .motion-float { animation-name: motion-float; }
+
+/* HTMLページ取り込み */
+.html-board {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.html-board-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+.toggle {
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--muted-text);
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+}
+
+.toggle.is-active {
+  background: var(--vermilion);
+  border-color: var(--vermilion);
+  color: #fff;
+}
+
+.html-board-surface {
+  position: relative;
+}
+
+.html-frame {
+  position: absolute;
+  top: 0;
+  left: 0;
+  border: none;
+  transform-origin: 0 0;
+  pointer-events: auto;
+}
+
+.html-board-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.element-selector code {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  color: var(--ink);
+  word-break: break-all;
+}
+
+.element-computed {
+  list-style: none;
+  padding: 0;
+  margin: 4px 0;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.empty-html-btn {
+  align-self: center;
+}
+
+/* HTML読み込みダイアログ(中央表示) */
+.dialog-backdrop {
+  justify-content: center;
+  align-items: center;
+}
+
+.html-dialog {
+  width: min(560px, 100%);
+  max-height: 90vh;
+  overflow: auto;
+  background: var(--panel);
+  border-radius: 8px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: 0 8px 32px rgba(28, 27, 25, 0.2);
+}
+
+.dialog-title {
+  font-size: var(--fs-lg);
+  margin: 0;
+}
+
+.html-dialog-textarea {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+}
 .motion-pulse { animation-name: motion-pulse; }

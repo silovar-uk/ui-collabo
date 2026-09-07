@@ -49,3 +49,34 @@
 - `brand/*.svg` をコンポーネントから `import` できるよう `src/vite-env.d.ts`(`/// <reference types="vite/client" />`)を追加した。D-4で計画されていた「`public/` へコピー」ではなく、vite標準のアセットimportを使う方式にした。base(`./`)がGitHub Pagesのサブパス配信のため、`public/` 直下を絶対パス参照するとデプロイ後にパスがずれる懸念があり、vite解決に任せた方が安全と判断した
 - C-4(指定一覧をパネル上部にまとめる表示)は計画書側で「余力があれば」の推奨扱いだったため、今回は見送った
 - 動作確認用に `.claude/launch.json` を追加した(コード本体ではなく開発ツール設定)。既存の別セッションが同名devサーバーを起動していたため、`autoPort: true` で衝突を避けるようにしている
+
+## HTMLページ取り込み(PLAN-HTML.md フェーズA〜D)
+
+- 高さ計測は `doc.documentElement.scrollHeight` ではなく `doc.body.scrollHeight` を使う。ルート要素(html)の
+  `scrollHeight` はCSS仕様上、iframeのviewport高(=現在設定している`height`スタイル)を下回らないようクランプ
+  されるため、コンテンツが短いページで常にiframeの現在の高さがそのまま返ってしまい、実測にならない。`body`は
+  ルート要素の特殊扱いを受けないため、実際のコンテンツ高が取れる(ブラウザ実機確認で発見して修正した)
+- srcdocのiframeは、Reactのeffect(`useEffect`)が実行される前に読み込みを終えて`load`イベントを取りこぼす
+  ことがある。`iframe.contentDocument.readyState === 'complete'` を先にチェックし、読み込み済みならその場で
+  測定処理を呼び、未読み込みなら従来どおり`load`リスナーを付ける、の両対応にした
+- 要素クリック時の矩形(`rect`)の分母は、`el.ownerDocument`の`scrollWidth`/`scrollHeight`ではなく、常に
+  `source.width`と計測済みの`measuredHeight`(state)を使う。前者は上記と同じクランプの影響を受けて不正確になる
+- `uniqueSelector`はid→タグ+単独class→祖先パス(最大5階層)→全階層nth-childの完全パスの順で一意になった時点で
+  確定する。既存の1箇所も、まったく同じ要素を再クリックしたときはセレクタの一致で検出し、新規作成せず選択に
+  切り替える
+- HTMLページの箇所(`spot.element`あり)は矩形のドラッグ・リサイズを`getSpotEditTarget`で無効化する
+  (`apply`が何もしない)。位置を変えたい場合は既存のラダー`spacing`(margin)で代替する、という計画方針どおり
+- ラダーの現在値→目標値の解決(`resolveLadder`)は、出力(export.ts)とその場反映(spotsToCss)の両方から
+  `src/lib/htmlCss.ts`の1関数を共有する。delta指定は現在値に最も近い段を探し、そこからdelta分ずらして
+  範囲外はクランプする
+- テストでDOM操作(`DOMParser`・`getComputedStyle`)を検証する必要があったため、`happy-dom`をdevDependency
+  として追加した。ビルド後の配布物(GitHub Pages)には含まれない、テスト実行時のみの依存であり、READMEが掲げる
+  「preactと標準APIだけで完結する」という本体側の非依存方針とは矛盾しない。`test/domPick.test.ts`にのみ
+  `// @vitest-environment happy-dom`を付け、他のテストは従来どおりnode環境のまま高速に保っている
+- `<script>`除去などのサニタイズ(`sanitizeHtml`)に加えて、`iframe`には`sandbox="allow-same-origin"`のみを
+  付け`allow-scripts`は付けない(両方付けるとiframeが自力でsandbox制限を外せてしまうため)。二重防御として
+  DOMParserでのタグ除去・`on*`属性除去・`javascript:` URL除去も行う
+- 既存ボードに(画像ページに加えて)HTMLページを追加した場合、`boardToMarkdown`のヘッダー判定は
+  `board.pages[0]`のみを見る既存の挙動をそのまま踏襲した(複数ページの出力フォーマットはPhase1から
+  未規定の暫定挙動、[Phase1決定](#実装中の判断ログ)参照)。単一のHTMLページのみを持つボード(通常の使い方)
+  では問題にならない
