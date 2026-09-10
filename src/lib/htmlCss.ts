@@ -2,7 +2,7 @@ import { FONT_MOODS, LADDER_TABLE } from '../vocab';
 import type { ComputedKey, LadderAttr, Note, Spot } from '../schema';
 
 /** ラダー属性のうち、実測CSSプロパティに対応するものだけを持つ。scale/speed/intensityは対応先がない。 */
-const LADDER_TO_CSS: Partial<Record<LadderAttr, ComputedKey>> = {
+export const LADDER_TO_CSS: Partial<Record<LadderAttr, ComputedKey>> = {
   fontSize: 'font-size',
   weight: 'font-weight',
   spacing: 'margin',
@@ -16,12 +16,12 @@ function ladderValue(attr: LadderAttr, step: number): string {
   return raw === 'full' ? '9999px' : `${raw}${def.unit ?? ''}`;
 }
 
-function parseNumber(value: string): number | null {
+export function parseNumber(value: string): number | null {
   const m = value.match(/-?\d+(\.\d+)?/);
   return m ? parseFloat(m[0]) : null;
 }
 
-function nearestStepIndex(attr: LadderAttr, current: number): number {
+export function nearestStepIndex(attr: LadderAttr, current: number): number {
   const steps = LADDER_TABLE[attr].steps;
   let best = 0;
   let bestDiff = Infinity;

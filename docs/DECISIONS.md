@@ -79,3 +79,15 @@
 - `readComputed`は`margin`/`padding`/`border-radius`/`border-width`について、ブラウザの
   shorthand computed値(4辺まとめ)ではなく、それぞれtop相当の1辺(`marginTop`等)だけを読む。
   ラダーが単一の数値段階(px)を前提にしているため、4辺が異なる場合でも代表値1つに単純化した
+
+## ラダー現在地計画(PLAN-LADDER.md)
+
+- HTMLページの箇所(`spot.element`)では、ラダーの「今」ボタンを実測値からの自動マーカー(`autoNow`)に
+  置き換えた。`resolveLadder`(htmlCss.ts)がもともと`note.current`を一切参照せず`element.computed`
+  しか見ていなかったため、「今」ボタンで手動セットしても出力・プレビューに反映されない状態だった
+  (docs/UI-LANGUAGE.md 破れ#3)。自動化により、実測できる場面ではボタン操作なしで正しい現在地が
+  ラダーに示されるようになる
+- `autoNow`は表示専用の派生値とし、`Note.current`には書き込まない。保存すると実測時点の値が
+  固定化され、要素側のスタイルが変わっても追随しなくなるため
+- 画像ページ(`spot.element`なし)では`autoNow`が渡らず、従来どおり「今」ボタンでの手動セットのまま
+  である(実機確認で回帰なしを確認済み)

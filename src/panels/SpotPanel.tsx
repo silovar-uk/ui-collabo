@@ -4,6 +4,7 @@ import { getSpotEditTarget } from '../lib/spotTarget';
 import { clampRect } from '../lib/geometry';
 import { ruleRefOptions } from '../lib/ruleRefs';
 import { COLOR_ROLES, LADDER_ATTRS, LADDER_TABLE, TONE_CHIPS } from '../vocab';
+import { LADDER_TO_CSS, nearestStepIndex, parseNumber } from '../lib/htmlCss';
 import { Ladder } from '../pickers/Ladder';
 import { ColorPicker } from '../pickers/ColorPicker';
 import { FontPicker } from '../pickers/FontPicker';
@@ -148,6 +149,14 @@ export function SpotPanel({ spot }: { spot: Spot }) {
   }
 
   // --- ラダー(属性ごとに0〜1つ) ---
+  /** HTMLページの箇所では、実測値から最も近い段を「今」として自動算出する(今ボタンの手動セット不要)。 */
+  function autoNowFor(attr: LadderAttr): number | undefined {
+    const cssKey = LADDER_TO_CSS[attr];
+    const raw = cssKey ? spot.element?.computed[cssKey] : undefined;
+    if (!raw) return undefined;
+    const num = parseNumber(raw);
+    return num === null ? undefined : nearestStepIndex(attr, num);
+  }
   function getLadderNote(attr: LadderAttr) {
     return spot.notes.find((n): n is Extract<Note, { kind: 'ladder' }> => n.kind === 'ladder' && n.attr === attr);
   }
@@ -315,7 +324,7 @@ export function SpotPanel({ spot }: { spot: Spot }) {
             {LADDER_ATTRS.filter((attr) => getLadderNote(attr)).map((attr) => (
               <div class="note-block" key={attr}>
                 <span class="field-label">{LADDER_TABLE[attr].label}</span>
-                <Ladder attr={attr} value={getLadderNote(attr)!} onChange={(v) => setLadder(attr, v)} />
+                <Ladder attr={attr} value={getLadderNote(attr)!} onChange={(v) => setLadder(attr, v)} autoNow={autoNowFor(attr)} />
                 {attr === 'fontSize' && fontSizeNote && 'step' in fontSizeNote.target && (
                   <details class="note-details" open={hasAnyRules(board.rules)}>
                     <summary>このボードの基準にする</summary>
@@ -342,7 +351,12 @@ export function SpotPanel({ spot }: { spot: Spot }) {
             ))}
             {typeof adder === 'object' && adder?.ladder ? (
               <div class="note-block">
-                <Ladder attr={adder.ladder} value={{ target: { step: 0 } }} onChange={(v) => { setLadder(adder.ladder, v); setAdder(null); }} />
+                <Ladder
+                  attr={adder.ladder}
+                  value={{ target: { step: 0 } }}
+                  onChange={(v) => { setLadder(adder.ladder, v); setAdder(null); }}
+                  autoNow={autoNowFor(adder.ladder)}
+                />
               </div>
             ) : adder === 'ladder-menu' ? (
               <div class="chip-row">

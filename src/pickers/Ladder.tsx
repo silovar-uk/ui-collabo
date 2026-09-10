@@ -13,6 +13,8 @@ interface Props {
   /** 「今」の概念がない場面(動きの速さ・強さなど)では相対チップと今ピンを隠す。 */
   hideRelative?: boolean;
   hideNow?: boolean;
+  /** 実測値から算出した現在地の段。渡されると「今」ボタンの代わりにこの段へマーカーを自動表示する。 */
+  autoNow?: number;
 }
 
 function StepPreview({ attr, value }: { attr: LadderAttr; value: number | string }) {
@@ -54,7 +56,7 @@ function StepPreview({ attr, value }: { attr: LadderAttr; value: number | string
   }
 }
 
-export function Ladder({ attr, value, onChange, hideRelative, hideNow }: Props) {
+export function Ladder({ attr, value, onChange, hideRelative, hideNow, autoNow }: Props) {
   const def = LADDER_TABLE[attr];
   const targetStep = 'step' in value.target ? value.target.step : undefined;
 
@@ -77,13 +79,13 @@ export function Ladder({ attr, value, onChange, hideRelative, hideNow }: Props) 
         {def.steps.map((s, i) => (
           <div class="ladder-step" key={i}>
             <button
-              class={`ladder-thumb${targetStep === i ? ' is-target' : ''}`}
-              title={`${s}${def.unit ?? ''}`}
+              class={`ladder-thumb${targetStep === i ? ' is-target' : ''}${autoNow === i ? ' is-auto-now' : ''}`}
+              title={autoNow === i ? `${s}${def.unit ?? ''}(実測値から今はここ)` : `${s}${def.unit ?? ''}`}
               onClick={() => onChange({ current: value.current, target: { step: i } })}
             >
               <StepPreview attr={attr} value={s} />
             </button>
-            {!hideNow && (
+            {!hideNow && autoNow === undefined && (
               <button
                 class={`ladder-now${value.current === i ? ' is-now' : ''}`}
                 title="今はこのくらい"
