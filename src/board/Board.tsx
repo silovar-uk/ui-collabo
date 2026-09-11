@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'preact/hooks';
+import { useRef, useState } from 'preact/hooks';
 import {
   activePageId,
   colorPickRequest,
@@ -9,11 +9,11 @@ import {
   selectedSpotId,
   spaceHeld,
   toggleOrderSpot,
-  undo,
   updateBoard,
 } from '../state';
 import { containRect, nominalCanvasSize, pxToRatio, ratioToPx, clampRect } from '../lib/geometry';
 import { useBoxSize } from '../lib/useBoxSize';
+import { useBoardKeys } from '../lib/useBoardKeys';
 import { getSpotEditTarget } from '../lib/spotTarget';
 import { hasGhostEffect } from '../lib/ghost';
 import { sampleImageColor } from '../lib/image';
@@ -26,11 +26,6 @@ const MIN_DRAG_PX = 8;
 const HANDLES = ['nw', 'n', 'ne', 'w', 'e', 'sw', 's', 'se'] as const;
 type Handle = (typeof HANDLES)[number];
 
-function isTypingTarget(el: EventTarget | null): boolean {
-  const tag = (el as HTMLElement | null)?.tagName;
-  return tag === 'INPUT' || tag === 'TEXTAREA';
-}
-
 export function Board() {
   const board = currentBoard.value;
   const [containerRef, boxSize] = useBoxSize<HTMLDivElement>();
@@ -39,43 +34,14 @@ export function Board() {
   const drag = useRef<{ mode: 'create' | 'move' | 'resize'; startX: number; startY: number; handle?: Handle; base?: Rect } | null>(null);
   const [, force] = useState(0);
 
+  useBoardKeys();
+
   const page = board?.pages.find((p) => p.id === activePageId.value) ?? null;
   const canvasSize = page?.image ? { width: page.image.width, height: page.image.height } : nominalCanvasSize(board?.format ?? { kind: 'web' });
-
-  useEffect(() => {
-    function onKeyDown(e: KeyboardEvent) {
-      if (isTypingTarget(e.target)) return;
-      if (!board) return;
-      if (e.key === 'Escape') {
-        selectedSpotId.value = null;
-      } else if ((e.key === 'Delete' || e.key === 'Backspace') && selectedSpotId.value) {
-        const id = selectedSpotId.value;
-        updateBoard((b) => ({ ...b, spots: b.spots.filter((s) => s.id !== id) }));
-        selectedSpotId.value = null;
-      } else if (e.key === 'z' && (e.ctrlKey || e.metaKey)) {
-        undo();
-      } else if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key) && selectedSpotId.value) {
-        e.preventDefault();
-        const step = e.shiftKey ? 0.05 : 0.01;
-        const dx = e.key === 'ArrowLeft' ? -step : e.key === 'ArrowRight' ? step : 0;
-        const dy = e.key === 'ArrowUp' ? -step : e.key === 'ArrowDown' ? step : 0;
-        nudgeSelected(dx, dy);
-      }
-    }
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  });
 
   if (!board || !page) return null;
 
   const cr = containRect(boxSize.width, boxSize.height, canvasSize.width, canvasSize.height);
-
-  function nudgeSelected(dx: number, dy: number) {
-    const spot = board!.spots.find((s) => s.id === selectedSpotId.value);
-    if (!spot) return;
-    const t = getSpotEditTarget(board!, spot);
-    t.apply(clampRect({ x: t.rect.x + dx, y: t.rect.y + dy, w: t.rect.w, h: t.rect.h }));
-  }
 
   function onSurfacePointerDown(e: PointerEvent) {
     if ((e.target as HTMLElement).closest('.spot-rect, .edit-box')) return;

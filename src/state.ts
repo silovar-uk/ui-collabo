@@ -10,8 +10,30 @@ export const ready = signal(false);
 export const library = signal<Library>(emptyLibrary());
 export const currentBoardId = signal<string | null>(null);
 export const selectedSpotId = signal<string | null>(null);
-/** Ctrl+Z 用の直前1操作のみのスナップショット。履歴スタックは持たない。 */
-let undoSnapshot: Board | null = null;
+
+// ponytail: 直接操作の道具として十分な深さ。無限に持つとメモリを圧迫するため50段で打ち切る
+const UNDO_LIMIT = 50;
+const MERGE_WINDOW_MS = 500;
+let undoStack: Board[] = [];
+let redoStack: Board[] = [];
+let lastPushAt = 0;
+
+/** ピッカー(ポップオーバー等)が開いているか。Escapeで選択解除より先にこれを閉じる。 */
+export const pickerOpen = signal(false);
+
+export interface Toast {
+  message: string;
+  onUndo?: () => void;
+}
+export const toast = signal<Toast | null>(null);
+let toastTimer: ReturnType<typeof setTimeout> | undefined;
+function showToast(message: string, onUndo?: () => void): void {
+  if (toastTimer) clearTimeout(toastTimer);
+  toast.value = { message, onUndo };
+  toastTimer = setTimeout(() => {
+    toast.value = null;
+  }, 5000);
+}
 
 export const currentBoard = computed<Board | null>(() => {
   const id = currentBoardId.value;
@@ -50,10 +72,17 @@ function scheduleSave(): void {
   }, SAVE_DEBOUNCE_MS);
 }
 
+function resetUndoHistory(): void {
+  undoStack = [];
+  redoStack = [];
+  lastPushAt = 0;
+}
+
 export function createBoard(format: Format): Board {
   const board = newBoard(format);
   library.value = { ...library.value, boards: [...library.value.boards, board] };
   currentBoardId.value = board.id;
+  resetUndoHistory();
   void kvSet(LAST_BOARD_KEY, board.id);
   scheduleSave();
   return board;
@@ -62,6 +91,7 @@ export function createBoard(format: Format): Board {
 export function openBoard(id: string): void {
   currentBoardId.value = id;
   selectedSpotId.value = null;
+  resetUndoHistory();
   void kvSet(LAST_BOARD_KEY, id);
 }
 
@@ -71,11 +101,20 @@ export function deleteBoard(id: string): void {
   scheduleSave();
 }
 
-/** 現在のボードを recipe で更新し、自動保存をスケジュールする。 */
+/**
+ * 現在のボードを recipe で更新し、自動保存をスケジュールする。
+ * 直前の積み込みから500ms以内の更新は同じ1段にまとめる(ラベルの打鍵が1文字ずつ積まれないため)。
+ */
 export function updateBoard(recipe: (board: Board) => Board): void {
   const board = currentBoard.value;
   if (!board) return;
-  undoSnapshot = board;
+  const now = Date.now();
+  if (now - lastPushAt > MERGE_WINDOW_MS) {
+    undoStack.push(board);
+    if (undoStack.length > UNDO_LIMIT) undoStack.shift();
+    redoStack = [];
+  }
+  lastPushAt = now;
   const next = { ...recipe(board), updatedAt: new Date().toISOString() };
   library.value = {
     ...library.value,
@@ -85,14 +124,35 @@ export function updateBoard(recipe: (board: Board) => Board): void {
 }
 
 export function undo(): void {
-  if (!undoSnapshot) return;
-  const snapshot = undoSnapshot;
-  library.value = {
-    ...library.value,
-    boards: library.value.boards.map((b) => (b.id === snapshot.id ? snapshot : b)),
-  };
-  undoSnapshot = null;
+  const board = currentBoard.value;
+  const prev = undoStack.pop();
+  if (!board || !prev) return;
+  redoStack.push(board);
+  if (redoStack.length > UNDO_LIMIT) redoStack.shift();
+  library.value = { ...library.value, boards: library.value.boards.map((b) => (b.id === prev.id ? prev : b)) };
+  lastPushAt = 0; // 次の更新は必ず新しい段として積む
   scheduleSave();
+}
+
+export function redo(): void {
+  const board = currentBoard.value;
+  const next = redoStack.pop();
+  if (!board || !next) return;
+  undoStack.push(board);
+  if (undoStack.length > UNDO_LIMIT) undoStack.shift();
+  library.value = { ...library.value, boards: library.value.boards.map((b) => (b.id === next.id ? next : b)) };
+  lastPushAt = 0;
+  scheduleSave();
+}
+
+/** 箇所を削除し、元に戻せるトーストを5秒出す。 */
+export function deleteSpot(id: string): void {
+  const board = currentBoard.value;
+  const spot = board?.spots.find((s) => s.id === id);
+  if (!board || !spot) return;
+  updateBoard((b) => ({ ...b, spots: b.spots.filter((s) => s.id !== id) }));
+  if (selectedSpotId.value === id) selectedSpotId.value = null;
+  showToast(`箇所${spot.n}を削除しました`, () => undo());
 }
 
 export function nextSpotNumber(board: Board): number {

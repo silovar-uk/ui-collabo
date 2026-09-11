@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
-import { lens, nextSpotNumber, selectedSpotId, spaceHeld, undo, updateBoard } from '../state';
+import { lens, nextSpotNumber, selectedSpotId, spaceHeld, updateBoard } from '../state';
 import { containRect, clampRect } from '../lib/geometry';
 import { useBoxSize } from '../lib/useBoxSize';
+import { useBoardKeys } from '../lib/useBoardKeys';
 import { attachPicker, readComputed, uniqueSelector } from '../lib/domPick';
 import { spotsToCss } from '../lib/htmlCss';
 import { SpotRect } from './SpotRect';
@@ -22,11 +23,6 @@ function buildFrameHtml(source: PageSource): string {
   return `<head>${meta}${overrides}</head>${source.html}`;
 }
 
-function isTypingTarget(el: EventTarget | null): boolean {
-  const tag = (el as HTMLElement | null)?.tagName;
-  return tag === 'INPUT' || tag === 'TEXTAREA';
-}
-
 export function HtmlBoard({ board, page }: { board: Board; page: Page }) {
   const source = page.source!;
   const [containerRef, boxSize] = useBoxSize<HTMLDivElement>();
@@ -35,23 +31,7 @@ export function HtmlBoard({ board, page }: { board: Board; page: Page }) {
   const showingBefore = spaceHeld.value || lens.value === 'before';
   const handlePickRef = useRef<(el: Element) => void>(() => {});
 
-  // Board.tsx は触らない方針のため、削除/選択解除/取り消しのキー操作はここで独自に持つ
-  useEffect(() => {
-    function onKeyDown(e: KeyboardEvent) {
-      if (isTypingTarget(e.target)) return;
-      if (e.key === 'Escape') {
-        selectedSpotId.value = null;
-      } else if ((e.key === 'Delete' || e.key === 'Backspace') && selectedSpotId.value) {
-        const id = selectedSpotId.value;
-        updateBoard((b) => ({ ...b, spots: b.spots.filter((s) => s.id !== id) }));
-        selectedSpotId.value = null;
-      } else if (e.key === 'z' && (e.ctrlKey || e.metaKey)) {
-        undo();
-      }
-    }
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, []);
+  useBoardKeys();
 
   // クリック時に呼ぶ処理を常に最新の board/page に保つ(iframeの再読み込みなしにノートだけ変わることが多いため)
   useEffect(() => {

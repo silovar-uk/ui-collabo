@@ -52,6 +52,31 @@ button {
   display: flex;
   flex-direction: column;
   height: 100%;
+  position: relative;
+}
+
+/* S5: 削除トースト */
+.toast {
+  position: absolute;
+  left: 50%;
+  bottom: var(--sp-5);
+  transform: translateX(-50%);
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  background: var(--ink);
+  color: var(--paper);
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: 6px;
+  font-size: var(--fs-sm);
+  box-shadow: 0 4px 16px rgba(28, 27, 25, 0.25);
+}
+
+.toast .btn-sm {
+  background: transparent;
+  border: 1px solid var(--paper);
+  color: var(--paper);
 }
 
 .app-shell.is-drag-over {

@@ -12,6 +12,7 @@ import { ExportDrawer } from './panels/ExportDrawer';
 import { RulesDrawer } from './panels/RulesDrawer';
 import { LibraryDrawer } from './panels/LibraryDrawer';
 import { HtmlIntakeDialog } from './panels/HtmlIntakeDialog';
+import { Toast } from './panels/Toast';
 import markSmallUrl from '../brand/mark-small.svg';
 import type { Board as BoardData } from './schema';
 
@@ -146,6 +147,7 @@ export function App() {
       {drawer === 'rules' && board && <RulesDrawer board={board} onClose={() => setDrawer(null)} />}
       {drawer === 'library' && board && <LibraryDrawer board={board} onClose={() => setDrawer(null)} />}
       {htmlDialogOpen && <HtmlIntakeDialog onClose={() => setHtmlDialogOpen(false)} />}
+      <Toast />
     </div>
   );
 }

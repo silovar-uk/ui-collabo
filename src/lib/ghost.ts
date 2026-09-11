@@ -12,7 +12,8 @@ function stepValue(attr: LadderAttr, step: number): number | null {
   return typeof raw === 'number' ? raw : null;
 }
 
-function resolveTargetStep(note: LadderNote): number | null {
+/** currentがあればcurrent+deltaを、なければstep指定をそのまま解決する(段の範囲内にクランプ)。 */
+export function resolveTargetStep(note: LadderNote): number | null {
   const def = LADDER_TABLE[note.attr];
   if ('step' in note.target) return note.target.step;
   if (note.current === undefined) return null;

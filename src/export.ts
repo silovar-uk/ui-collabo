@@ -1,7 +1,8 @@
-import type { Board, ElementRef, ImageRole, Note, Rect, Rules, Spot } from './schema';
+import type { Board, ElementRef, ImageRole, Note, Page, Rect, Rules, Spot } from './schema';
 import { COLOR_DIRECTIONS, COLOR_ROLES, FONT_MOODS, LADDER_TABLE, MOTIONS, RELATIVE_CHIPS } from './vocab';
 import { ruleRefOptions } from './lib/ruleRefs';
 import { resolveLadder } from './lib/htmlCss';
+import { resolveTargetStep } from './lib/ghost';
 
 const MOTION_TRIGGER_LABEL: Record<'enter' | 'hover' | 'transition', string> = {
   enter: '登場時',
@@ -113,14 +114,28 @@ function formatNote(note: Note, ctx: NoteCtx): string {
     case 'ladder': {
       const def = LADDER_TABLE[note.attr];
       const target = note.target;
-      if ('step' in target) {
-        return `- ${def.label}: ${def.steps[target.step]}${def.unit ?? ''}`;
+      const stepText = (step: number) => `${def.steps[step]}${def.unit ?? ''}`;
+      const chip = 'delta' in target ? RELATIVE_CHIPS.find((c) => c.delta === target.delta) : undefined;
+      // S7: currentがあれば「今 → こうしたい」の形で出力に届ける。deltaはcurrentを起点に解決する
+      if (note.current !== undefined) {
+        const toStep = resolveTargetStep(note);
+        const to = toStep === null ? '' : stepText(toStep);
+        return `- ${def.label}: ${stepText(note.current)} → ${to}${chip ? `(${chip.label})` : ''}`;
       }
-      const delta = target.delta;
-      const chip = RELATIVE_CHIPS.find((c) => c.delta === delta);
+      if ('step' in target) return `- ${def.label}: ${stepText(target.step)}`;
       return `- ${def.label}: ${chip?.label ?? ''}`;
     }
   }
+}
+
+/** S9: ノートなし・位置の差分なしの箇所(囲っただけ)は、指示文に含めない対象かどうか。 */
+function hasSpecifiedContent(spot: Spot, board: Board): boolean {
+  if (spot.notes.length > 0) return true;
+  if (board.imageRole === 'draft' && spot.targetRect) {
+    const { rect, targetRect } = spot;
+    if (rect.x !== targetRect.x || rect.y !== targetRect.y || rect.w !== targetRect.w || rect.h !== targetRect.h) return true;
+  }
+  return false;
 }
 
 // ponytail: 3x3の粗いゾーン判定。厳密な意味解析はしない
@@ -179,13 +194,32 @@ function formatHtmlNote(note: Note, element: ElementRef, ctx: NoteCtx): string {
   return formatNote(note, ctx);
 }
 
+/** S10: ページ見出し「## p.N」に添える、そのページ固有の情報。 */
+function pageHeading(page: Page, index: number): string {
+  if (page.source) {
+    const originPart = page.source.origin ? `(${page.source.origin})` : '';
+    return `## p.${index + 1} Webページ${originPart}、レンダリング幅 ${page.source.width}px`;
+  }
+  if (page.image) return `## p.${index + 1}(画像 ${page.image.width}×${page.image.height})`;
+  return `## p.${index + 1}`;
+}
+
 export function boardToMarkdown(board: Board): string {
-  const page = board.pages[0];
+  const pages = board.pages;
+  const page = pages[0];
   const activeSpots = board.spots.filter((s) => !s.keep);
   const keptSpots = board.spots.filter((s) => s.keep);
+  // S10: 1枚目だけを見ず、ボード内に画像ページ・HTMLページがあるかどうかで組み立てる
+  const hasHtmlPage = pages.some((p) => p.source);
+  const isMultiPage = pages.length > 1;
 
-  const parts: string[] = [page?.source ? HTML_PREAMBLE : PREAMBLE, '', `# デザイン指示: ${board.title}`, ''];
-  if (page?.source) {
+  const parts: string[] = [hasHtmlPage ? HTML_PREAMBLE : PREAMBLE, '', `# デザイン指示: ${board.title}`, ''];
+  if (isMultiPage) {
+    const formatLabel =
+      board.format.kind === 'web' ? 'Web' : board.format.kind === 'slide' ? `スライド(${board.format.aspect})` : '白紙';
+    parts.push(`- 対象: ${formatLabel}、${pages.length}ページ`);
+    parts.push(`- 種類: ${hasHtmlPage ? 'コード修正指示(HTMLページに対して)' : docKind(board)}`);
+  } else if (page?.source) {
     const originPart = page.source.origin ? `(${page.source.origin})` : '';
     parts.push(`- 対象: Webページ${originPart}、レンダリング幅 ${page.source.width}px`);
     parts.push('- 種類: コード修正指示(HTMLページに対して)');
@@ -241,12 +275,19 @@ export function boardToMarkdown(board: Board): string {
   }
 
   const isBrief = board.imageRole === null;
-  if (activeSpots.length > 0) {
-    parts.push(isBrief ? '## レイアウト' : '## 箇所ごと');
-    for (const spot of activeSpots) {
-      const ctx: NoteCtx = { imageRole: board.imageRole, spotN: spot.n, rules: board.rules };
-      parts.push(isBrief ? layoutLine(spot, ctx) : spotSection(spot, ctx));
-      parts.push('');
+  // S9: 白紙(レイアウト)は位置そのものが内容なので対象外。draft/referenceは中身のない箇所を渡さない
+  const specifiedSpots = isBrief ? activeSpots : activeSpots.filter((s) => hasSpecifiedContent(s, board));
+  if (specifiedSpots.length > 0) {
+    if (!isMultiPage) parts.push(isBrief ? '## レイアウト' : '## 箇所ごと');
+    for (const [pageIndex, p] of pages.entries()) {
+      const pageSpots = specifiedSpots.filter((s) => s.pageId === p.id);
+      if (pageSpots.length === 0) continue;
+      if (isMultiPage) parts.push(pageHeading(p, pageIndex));
+      for (const spot of pageSpots) {
+        const ctx: NoteCtx = { imageRole: board.imageRole, spotN: spot.n, rules: board.rules };
+        parts.push(isBrief ? layoutLine(spot, ctx) : spotSection(spot, ctx));
+        parts.push('');
+      }
     }
   }
 

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
-import { colorPickRequest, currentBoard, selectedSpotId, updateBoard } from '../state';
+import { colorPickRequest, currentBoard, deleteSpot, updateBoard } from '../state';
 import { getSpotEditTarget } from '../lib/spotTarget';
 import { clampRect } from '../lib/geometry';
 import { ruleRefOptions } from '../lib/ruleRefs';
@@ -443,13 +443,7 @@ export function SpotPanel({ spot }: { spot: Spot }) {
         />
       </div>
 
-      <button
-        class="btn-danger"
-        onClick={() => {
-          updateBoard((b) => ({ ...b, spots: b.spots.filter((s) => s.id !== spot.id) }));
-          selectedSpotId.value = null;
-        }}
-      >
+      <button class="btn-danger" onClick={() => deleteSpot(spot.id)}>
         この箇所を削除
       </button>
     </div>
