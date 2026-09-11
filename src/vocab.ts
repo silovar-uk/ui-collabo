@@ -15,6 +15,20 @@ export const TONE_CHIPS = [
   'にぎやかに',
 ] as const;
 
+/** R4: 言葉で探すときの、ひらがな読み。 */
+export const TONE_CHIP_KANA: Record<(typeof TONE_CHIPS)[number], string> = {
+  静かに: 'しずかに',
+  主張を強く: 'しゅちょうをつよく',
+  軽く: 'かるく',
+  重厚に: 'じゅうこうに',
+  親しみやすく: 'したしみやすく',
+  上品に: 'じょうひんに',
+  整然と: 'せいぜんと',
+  遊びを: 'あそびを',
+  シンプルに: 'しんぷるに',
+  にぎやかに: 'にぎやかに',
+};
+
 export interface LadderDef {
   label: string;
   steps: (number | string)[];
@@ -62,6 +76,25 @@ export function relativeWordLabel(attr: LadderAttr, delta: number): string {
   return `${prefix}${word}`;
 }
 
+// R4: 言葉で探すときの、ひらがな読み(IME変換前でも部分一致させるため)
+export const RELATIVE_WORD_KANA: Record<LadderAttr, { decrease: string; increase: string }> = {
+  fontSize: { decrease: 'ちいさく', increase: 'おおきく' },
+  scale: { decrease: 'ちいさく', increase: 'おおきく' },
+  weight: { decrease: 'ほそく', increase: 'ふとく' },
+  lineWidth: { decrease: 'ほそく', increase: 'ふとく' },
+  spacing: { decrease: 'つめる', increase: 'ひろげる' },
+  radius: { decrease: 'かどばらせる', increase: 'まるく' },
+  speed: { decrease: 'はやく', increase: 'ゆっくり' },
+  intensity: { decrease: 'ひかえめに', increase: 'つよく' },
+};
+
+export function relativeWordKana(attr: LadderAttr, delta: number): string {
+  const words = RELATIVE_WORD_KANA[attr];
+  const word = delta < 0 ? words.decrease : words.increase;
+  const prefix = Math.abs(delta) >= 2 ? 'ずっと' : 'すこし';
+  return `${prefix}${word}`;
+}
+
 export function stepLabel(def: LadderDef, step: number): string {
   return `${def.steps[step]}${def.unit ?? ''}`;
 }
@@ -102,41 +135,43 @@ export const COLOR_ROLES: { id: 'text' | 'bg' | 'accent' | 'line'; label: string
 export interface FontMood {
   id: string;
   label: string;
+  kana: string;
   font: string;
   fallback: string;
 }
 
 export const FONT_MOODS: FontMood[] = [
-  { id: 'quiet-mincho', label: '静かな明朝', font: 'Shippori Mincho', fallback: 'serif' },
-  { id: 'clear-gothic', label: 'はっきりゴシック', font: 'Noto Sans JP', fallback: 'sans-serif' },
-  { id: 'soft-round', label: 'やわらか丸ゴ', font: 'M PLUS Rounded 1c', fallback: 'sans-serif' },
-  { id: 'thin-gothic', label: 'きりっと細ゴシック', font: 'Zen Kaku Gothic New', fallback: 'sans-serif' },
-  { id: 'classic-serif', label: 'クラシック・セリフ', font: 'Playfair Display, Shippori Mincho', fallback: 'serif' },
-  { id: 'modern-sans', label: 'モダン・サンセリフ', font: 'Inter, Noto Sans JP', fallback: 'sans-serif' },
-  { id: 'mono', label: '技術的・等幅', font: 'JetBrains Mono, BIZ UDGothic', fallback: 'monospace' },
-  { id: 'display', label: '見出し向き・ディスプレイ', font: 'Dela Gothic One', fallback: 'sans-serif' },
-  { id: 'hand', label: '手書き風', font: 'Yomogi', fallback: 'cursive' },
-  { id: 'ud', label: '読みやすさ重視', font: 'BIZ UDPGothic', fallback: 'sans-serif' },
+  { id: 'quiet-mincho', label: '静かな明朝', kana: 'しずかなみんちょう', font: 'Shippori Mincho', fallback: 'serif' },
+  { id: 'clear-gothic', label: 'はっきりゴシック', kana: 'はっきりごしっく', font: 'Noto Sans JP', fallback: 'sans-serif' },
+  { id: 'soft-round', label: 'やわらか丸ゴ', kana: 'やわらかまるご', font: 'M PLUS Rounded 1c', fallback: 'sans-serif' },
+  { id: 'thin-gothic', label: 'きりっと細ゴシック', kana: 'きりっとほそごしっく', font: 'Zen Kaku Gothic New', fallback: 'sans-serif' },
+  { id: 'classic-serif', label: 'クラシック・セリフ', kana: 'くらしっくせりふ', font: 'Playfair Display, Shippori Mincho', fallback: 'serif' },
+  { id: 'modern-sans', label: 'モダン・サンセリフ', kana: 'もだんさんせりふ', font: 'Inter, Noto Sans JP', fallback: 'sans-serif' },
+  { id: 'mono', label: '技術的・等幅', kana: 'ぎじゅつてきとうはば', font: 'JetBrains Mono, BIZ UDGothic', fallback: 'monospace' },
+  { id: 'display', label: '見出し向き・ディスプレイ', kana: 'みだしむきでぃすぷれい', font: 'Dela Gothic One', fallback: 'sans-serif' },
+  { id: 'hand', label: '手書き風', kana: 'てがきふう', font: 'Yomogi', fallback: 'cursive' },
+  { id: 'ud', label: '読みやすさ重視', kana: 'よみやすさじゅうし', font: 'BIZ UDPGothic', fallback: 'sans-serif' },
 ];
 
 export interface MotionDef {
   id: string;
   label: string;
+  kana: string;
 }
 
 export const MOTIONS: MotionDef[] = [
-  { id: 'fade', label: 'じわっと' },
-  { id: 'fade-up', label: '下からふわっと' },
-  { id: 'fade-down', label: '上からふわっと' },
-  { id: 'slide-left', label: '左からすっと' },
-  { id: 'slide-right', label: '右からすっと' },
-  { id: 'scale-in', label: '広がって出る' },
-  { id: 'pop', label: 'ポンと出る' },
-  { id: 'blur-in', label: 'ぼやけから出る' },
-  { id: 'wipe', label: '拭うように出る' },
-  { id: 'typewriter', label: '一文字ずつ' },
-  { id: 'float', label: 'ふわふわ浮く' },
-  { id: 'pulse', label: '脈打つ' },
+  { id: 'fade', label: 'じわっと', kana: 'じわっと' },
+  { id: 'fade-up', label: '下からふわっと', kana: 'したからふわっと' },
+  { id: 'fade-down', label: '上からふわっと', kana: 'うえからふわっと' },
+  { id: 'slide-left', label: '左からすっと', kana: 'ひだりからすっと' },
+  { id: 'slide-right', label: '右からすっと', kana: 'みぎからすっと' },
+  { id: 'scale-in', label: '広がって出る', kana: 'ひろがってでる' },
+  { id: 'pop', label: 'ポンと出る', kana: 'ぽんとでる' },
+  { id: 'blur-in', label: 'ぼやけから出る', kana: 'ぼやけからでる' },
+  { id: 'wipe', label: '拭うように出る', kana: 'ぬぐうようにでる' },
+  { id: 'typewriter', label: '一文字ずつ', kana: 'いちもじずつ' },
+  { id: 'float', label: 'ふわふわ浮く', kana: 'ふわふわうく' },
+  { id: 'pulse', label: '脈打つ', kana: 'みゃくうつ' },
 ];
 
 export const MOTION_TRIGGERS: { id: 'enter' | 'hover' | 'transition'; label: string }[] = [

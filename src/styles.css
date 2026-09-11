@@ -1008,6 +1008,45 @@ button {
   flex-wrap: wrap;
 }
 
+/* R4: 言葉で探す */
+.command-search {
+  gap: var(--sp-2);
+}
+
+.command-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 280px;
+  overflow: auto;
+}
+
+.command-item {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 6px var(--sp-2);
+  border-radius: 4px;
+  background: none;
+  border: none;
+  text-align: left;
+}
+
+.command-item:hover,
+.command-item.is-active {
+  background: rgba(228, 87, 46, 0.12);
+}
+
+.command-preview {
+  min-width: 28px;
+  text-align: center;
+  font-size: 14px;
+}
+
+.command-label {
+  font-size: var(--fs-sm);
+}
+
 /* R2: 照合 */
 .round-compare-image {
   position: absolute;
