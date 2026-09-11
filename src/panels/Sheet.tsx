@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
-import { boardToLines, boardToMarkdown, hasSpecifiedContent, renderNumberedImage, type Line } from '../export';
+import { boardToLines, boardToMarkdown, hasSpecifiedContent, renderProofSheet, type Line } from '../export';
 import * as notes from '../lib/notes';
 import { extractPalette, type PaletteColor } from '../lib/palette';
 import { createRoundBoard, isProofed } from '../lib/round';
@@ -211,10 +211,12 @@ function downloadBlob(blob: Blob, filename: string): void {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
+/** R3: H5で渡す画像は校正紙(画像1枚で箇所と指示の両方が読める)を既定にする。 */
 async function numberedImageBlob(board: Board): Promise<Blob | null> {
   const page = board.pages.find((p) => p.image);
   if (!page?.image) return null;
-  const canvas = await renderNumberedImage({ image: page.image }, board.spots.filter((s) => s.pageId === page.id));
+  const pageSpots = board.spots.filter((s) => s.pageId === page.id);
+  const canvas = await renderProofSheet({ image: page.image }, pageSpots, boardToLines(board));
   return new Promise((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('画像の生成に失敗しました'))), 'image/png'));
 }
 

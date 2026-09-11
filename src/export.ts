@@ -409,3 +409,165 @@ export function renderNumberedImage(page: { image: { dataUrl: string; width: num
     img.src = page.image.dataUrl;
   });
 }
+
+function loadImageEl(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error('画像の読み込みに失敗しました'));
+    img.src = src;
+  });
+}
+
+const PROOF_MARGIN_RATIO = 0.45;
+const PROOF_MARGIN_MIN = 480;
+const PROOF_PADDING = 24;
+const PROOF_LINE_HEIGHT = 24;
+const PROOF_BLOCK_GAP = 20;
+const PROOF_HEADING_FONT = 'bold 20px "Noto Sans JP", sans-serif';
+const PROOF_BODY_FONT = '16px "Noto Sans JP", sans-serif';
+const PROOF_WASHI = '#F7F4EE';
+const PROOF_INK = '#1C1B19';
+const PROOF_VERMILION = '#E4572E';
+
+/** 1〜20は丸数字、それ以外は「(n)」にする。 */
+function circledNumber(n: number): string {
+  return n >= 1 && n <= 20 ? String.fromCodePoint(0x2460 + n - 1) : `(${n})`;
+}
+
+/** 和文でも読める幅で1文字ずつ折り返す。 */
+function wrapByChar(ctx: CanvasRenderingContext2D, text: string, maxWidth: number, font: string): string[] {
+  ctx.font = font;
+  const lines: string[] = [];
+  let cur = '';
+  for (const ch of text) {
+    const next = cur + ch;
+    if (cur && ctx.measureText(next).width > maxWidth) {
+      lines.push(cur);
+      cur = ch;
+    } else {
+      cur = next;
+    }
+  }
+  if (cur) lines.push(cur);
+  return lines;
+}
+
+/**
+ * R3: 校正紙。元画像の右に和紙色の余白を足し、箇所ごとに赤字の指示を並べて引き出し線で結ぶ。
+ * 画像1枚だけをAIに渡しても、箇所と指示が読めるようにする。
+ */
+export async function renderProofSheet(page: { image: { dataUrl: string; width: number; height: number } }, spots: Spot[], lines: Line[]): Promise<HTMLCanvasElement> {
+  if (document.fonts?.ready) await document.fonts.ready;
+  const img = await loadImageEl(page.image.dataUrl);
+  const { width: iw, height: ih } = page.image;
+  const marginW = Math.max(PROOF_MARGIN_MIN, Math.round(iw * PROOF_MARGIN_RATIO));
+  const textMaxWidth = marginW - PROOF_PADDING * 2;
+
+  // 箇所ごとのノート行(先頭の「- 」は取り、見出しは含めない。見出しは箇所のラベルから作る)
+  const noteLinesBySpot = new Map<string, string[]>();
+  for (const line of lines) {
+    if (!line.spotId || !line.noteId) continue;
+    if (!noteLinesBySpot.has(line.spotId)) noteLinesBySpot.set(line.spotId, []);
+    noteLinesBySpot.get(line.spotId)!.push(line.text.replace(/^\s*-\s*/, ''));
+  }
+
+  const activeSpots = spots.filter((s) => !s.keep && (noteLinesBySpot.get(s.id)?.length ?? 0) > 0).sort((a, b) => a.rect.y - b.rect.y);
+  const keptSpots = spots.filter((s) => s.keep);
+
+  const measureCanvas = document.createElement('canvas');
+  const mctx = measureCanvas.getContext('2d')!;
+
+  interface Block {
+    spot: Spot;
+    rows: { text: string; heading: boolean }[];
+    height: number;
+  }
+  const blocks: Block[] = activeSpots.map((spot) => {
+    const heading = `${circledNumber(spot.n)} ${spot.label || `箇所${spot.n}`}`;
+    const rows: { text: string; heading: boolean }[] = [];
+    for (const t of wrapByChar(mctx, heading, textMaxWidth, PROOF_HEADING_FONT)) rows.push({ text: t, heading: true });
+    for (const raw of noteLinesBySpot.get(spot.id) ?? []) {
+      for (const t of wrapByChar(mctx, raw, textMaxWidth, PROOF_BODY_FONT)) rows.push({ text: t, heading: false });
+    }
+    return { spot, rows, height: rows.length * PROOF_LINE_HEIGHT };
+  });
+
+  const keptHeight = keptSpots.length > 0 ? PROOF_LINE_HEIGHT * (1 + keptSpots.length) + PROOF_BLOCK_GAP : 0;
+  const contentHeight = blocks.reduce((sum, b) => sum + b.height + PROOF_BLOCK_GAP, PROOF_PADDING) + keptHeight;
+  const canvasHeight = Math.max(ih, contentHeight);
+
+  const canvas = document.createElement('canvas');
+  canvas.width = iw + marginW;
+  canvas.height = canvasHeight;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('canvas 2d context を取得できませんでした');
+
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(img, 0, 0, iw, ih);
+  ctx.fillStyle = PROOF_WASHI;
+  ctx.fillRect(iw, 0, marginW, canvasHeight);
+
+  const badgeR = Math.max(BADGE_MIN, iw * BADGE_RATIO);
+  for (const spot of activeSpots) {
+    const x = spot.rect.x * iw;
+    const y = spot.rect.y * ih;
+    ctx.beginPath();
+    ctx.arc(x, y, badgeR, 0, Math.PI * 2);
+    ctx.fillStyle = PROOF_INK;
+    ctx.fill();
+    ctx.fillStyle = '#ffffff';
+    ctx.font = `${Math.round(badgeR)}px Inter, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(String(spot.n), x, y + 1);
+  }
+
+  const marginX = iw + PROOF_PADDING;
+  let cursorY = PROOF_PADDING;
+  for (const block of blocks) {
+    const blockY = Math.max(cursorY, spotCenterY(block.spot, ih) - block.height / 2);
+
+    // 引き出し線: 箇所の右辺の中央から、赤字の塊へ
+    ctx.strokeStyle = PROOF_VERMILION;
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([4, 3]);
+    ctx.beginPath();
+    ctx.moveTo((block.spot.rect.x + block.spot.rect.w) * iw, spotCenterY(block.spot, ih));
+    ctx.lineTo(marginX, blockY + PROOF_LINE_HEIGHT / 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    let rowY = blockY;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    for (const row of block.rows) {
+      ctx.font = row.heading ? PROOF_HEADING_FONT : PROOF_BODY_FONT;
+      ctx.fillStyle = row.heading ? PROOF_INK : PROOF_VERMILION;
+      ctx.fillText(row.text, marginX, rowY);
+      rowY += PROOF_LINE_HEIGHT;
+    }
+    cursorY = blockY + block.height + PROOF_BLOCK_GAP;
+  }
+
+  if (keptSpots.length > 0) {
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    ctx.font = PROOF_HEADING_FONT;
+    ctx.fillStyle = PROOF_INK;
+    ctx.fillText('変えないもの', marginX, cursorY);
+    cursorY += PROOF_LINE_HEIGHT;
+    ctx.font = PROOF_BODY_FONT;
+    for (const spot of keptSpots) {
+      ctx.fillText(`${spot.n} ${spot.label || `箇所${spot.n}`}`, marginX, cursorY);
+      cursorY += PROOF_LINE_HEIGHT;
+    }
+  }
+
+  return canvas;
+}
+
+function spotCenterY(spot: Spot, imageHeight: number): number {
+  return (spot.rect.y + spot.rect.h / 2) * imageHeight;
+}
