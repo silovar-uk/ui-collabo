@@ -44,6 +44,8 @@ function rectLabel(r: Rect): string {
 }
 
 function docKind(board: Board): string {
+  // R2: 再校(照合)は、前回の指示のうち未反映のものを含む旨をヘッダーに明記する
+  if (board.round) return '修正指示(再校。前回の指示のうち未反映のものを含みます)';
   if (board.imageRole === 'draft') return '修正指示(初校に対して)';
   if (board.imageRole === 'reference') return '参考画像に基づく指定';
   return '制作前の指定';
@@ -167,9 +169,14 @@ function layoutLines(spot: Spot, ctx: NoteCtx): Line[] {
   return lines;
 }
 
+// R2: 持ち越したのにまだ○が付いていない箇所には、前回からの持ち越しであることを添える
+function carriedSuffix(spot: Spot): string {
+  return spot.carried && spot.check !== 'ok' ? '(前回も指示・未反映)' : '';
+}
+
 function spotSectionLines(spot: Spot, ctx: NoteCtx): Line[] {
   if (spot.element) return htmlSpotSectionLines(spot, spot.element, ctx);
-  const lines: Line[] = [{ text: `### ${spot.n} ${spot.label || `箇所${spot.n}`}(${rectLabel(spot.rect)})`, spotId: spot.id }];
+  const lines: Line[] = [{ text: `### ${spot.n} ${spot.label || `箇所${spot.n}`}(${rectLabel(spot.rect)})${carriedSuffix(spot)}`, spotId: spot.id }];
   // targetRect の差分は draft(今の状態がある)ときだけ意味を持つ
   if (ctx.imageRole === 'draft') lines.push(...positionLines(spot));
   for (const n of spot.notes) lines.push({ text: formatNote(n, ctx), spotId: spot.id, noteId: n.id });
@@ -177,7 +184,7 @@ function spotSectionLines(spot: Spot, ctx: NoteCtx): Line[] {
 }
 
 function htmlSpotSectionLines(spot: Spot, element: ElementRef, ctx: NoteCtx): Line[] {
-  const lines: Line[] = [{ text: `### ${spot.n} ${spot.label || `箇所${spot.n}`}  \`${element.selector}\``, spotId: spot.id }];
+  const lines: Line[] = [{ text: `### ${spot.n} ${spot.label || `箇所${spot.n}`}  \`${element.selector}\`${carriedSuffix(spot)}`, spotId: spot.id }];
   const textPart = element.text ? ` 「${element.text}」` : '';
   lines.push({ text: `- 要素: <${element.tag}>${textPart}`, spotId: spot.id });
   for (const n of spot.notes) lines.push({ text: formatHtmlNote(n, element, ctx), spotId: spot.id, noteId: n.id });
@@ -306,7 +313,9 @@ export function boardToLines(board: Board): Line[] {
   if (keptSpots.length > 0) {
     lines.push({ text: '## 変えないもの' });
     for (const spot of keptSpots) {
-      lines.push({ text: `- ${spot.n} ${spot.label || `箇所${spot.n}`}`, spotId: spot.id });
+      // R2: 照合で○を付けた(前回修正済みの)箇所と分かるようにする
+      const suffix = spot.carried && spot.check === 'ok' ? '(前回修正済み)' : '';
+      lines.push({ text: `- ${spot.n} ${spot.label || `箇所${spot.n}`}${suffix}`, spotId: spot.id });
     }
     lines.push({ text: '' });
   }

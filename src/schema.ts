@@ -101,6 +101,8 @@ export interface Spot {
   keep: boolean;
   notes: Note[];
   element?: ElementRef; // 追加。HTMLページで要素をクリックして作った箇所のみ持つ
+  carried?: boolean; // R2追加。前回の箇所を再校に持ち越したものか
+  check?: 'ok' | 'ng'; // R2追加。carried箇所の照合結果(○直った/×まだ)
 }
 
 export interface Rules {
@@ -128,6 +130,7 @@ export interface Board {
   rules: Rules;
   tone: { chips: string[]; text: string };
   order: string[];
+  round?: { prevBoardId: string; n: number }; // R2追加。n=2で再校、3で三校
 }
 
 export interface RuleSet {

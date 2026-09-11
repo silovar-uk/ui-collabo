@@ -2,8 +2,11 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 import { boardToLines, boardToMarkdown, hasSpecifiedContent, renderNumberedImage, type Line } from '../export';
 import * as notes from '../lib/notes';
 import { extractPalette, type PaletteColor } from '../lib/palette';
+import { createRoundBoard, isProofed } from '../lib/round';
+import { fileToImage } from '../lib/image';
 import { tally, type TallyEntry } from '../lib/audit';
 import {
+  addAndOpenBoard,
   auditHoverSelectors,
   auditRuleCheckRequest,
   hoverLine,
@@ -218,12 +221,17 @@ async function numberedImageBlob(board: Board): Promise<Blob | null> {
 /** H5: 「AIに渡す」を1つのボタンで。画像があれば1回目で画像、2回目で指示文をコピーする。 */
 function ExportButton({ board }: { board: Board }) {
   const [step, setStep] = useState<1 | 2>(1);
-  useEffect(() => setStep(1), [board.id]);
+  const [exported, setExported] = useState(false);
+  useEffect(() => {
+    setStep(1);
+    setExported(false);
+  }, [board.id]);
   const hasImages = board.pages.some((p) => p.image);
 
   async function handleClick() {
     if (!hasImages) {
-      await copyMarkdown(board);
+      await copyMarkdown(board).catch(() => {});
+      setExported(true);
       return;
     }
     if (step === 1) {
@@ -240,12 +248,23 @@ function ExportButton({ board }: { board: Board }) {
         } catch {
           /* 画像自体が作れない場合は諦めて指示文だけ渡す */
         }
-        await copyMarkdown(board);
+        await copyMarkdown(board).catch(() => {});
+        setExported(true);
       }
       return;
     }
-    await copyMarkdown(board);
+    await copyMarkdown(board).catch(() => {});
     setStep(1);
+    setExported(true);
+  }
+
+  async function handleRoundFile(e: Event) {
+    const file = (e.target as HTMLInputElement).files?.[0];
+    (e.target as HTMLInputElement).value = '';
+    if (!file) return;
+    const img = await fileToImage(file);
+    const next = createRoundBoard(board, { id: crypto.randomUUID(), image: img });
+    addAndOpenBoard(next);
   }
 
   return (
@@ -254,6 +273,13 @@ function ExportButton({ board }: { board: Board }) {
       <button class="btn sheet-export-btn" onClick={handleClick}>
         {hasImages && step === 2 ? '② 指示文をコピー' : 'AIに渡す'}
       </button>
+      {/* R2: 渡したあとに、直った版を貼って照合する入口 */}
+      {exported && hasImages && board.imageRole === 'draft' && (
+        <label class="btn-sm sheet-round-entry">
+          AIが直したら、直った画像を貼って照合
+          <input type="file" accept="image/*" hidden onChange={handleRoundFile} />
+        </label>
+      )}
     </div>
   );
 }
@@ -356,6 +382,16 @@ function SpotCard({ spot, lines, selected, flashKeys }: SpotCardProps) {
 
   return (
     <div class={`sheet-card${selected ? ' is-selected' : ''}`}>
+      {spot.carried && (
+        <div class="sheet-card-check">
+          <button class={`btn-sm${spot.check === 'ok' ? ' is-active' : ''}`} onClick={() => updateBoard(notes.setSpotCheck(spot.id, 'ok'))}>
+            ○ 直った
+          </button>
+          <button class={`btn-sm${spot.check === 'ng' ? ' is-active' : ''}`} onClick={() => updateBoard(notes.setSpotCheck(spot.id, 'ng'))}>
+            × まだ
+          </button>
+        </div>
+      )}
       {selected && (
         <div class="sheet-card-head">
           <input
@@ -480,6 +516,7 @@ export function Sheet({ board }: { board: Board }) {
 
   return (
     <div class="sheet">
+      {isProofed(board) && <div class="sheet-proofed">校了。直すところはありません</div>}
       <BoardCard board={board} />
       <ImagePaletteCard board={board} />
       <HtmlAuditCard board={board} />

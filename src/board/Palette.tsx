@@ -123,6 +123,16 @@ export function Palette({ board, spot, cr }: { board: Board; spot: Spot; cr: Con
         </div>
       )}
       <div class="palette-bar" ref={barRef}>
+        {spot.carried && (
+          <>
+            <button class={`palette-btn palette-btn-ok${spot.check === 'ok' ? ' has-value' : ''}`} onClick={() => updateBoard(notes.setSpotCheck(spot.id, 'ok'))} title="直った">
+              ○
+            </button>
+            <button class={`palette-btn palette-btn-ng${spot.check === 'ng' ? ' has-value' : ''}`} onClick={() => updateBoard(notes.setSpotCheck(spot.id, 'ng'))} title="まだ">
+              ×
+            </button>
+          </>
+        )}
         {!spot.element && (
           <button class="palette-btn" onClick={() => toggle('position')} title="位置">
             ⇕

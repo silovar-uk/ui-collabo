@@ -27,6 +27,9 @@ import { LensToggle } from './LensToggle';
 import { ImageRoleToggle } from './ImageRoleToggle';
 import { Palette } from './Palette';
 import { PaletteHighlight } from './PaletteHighlight';
+import { RoundCompare } from './RoundCompare';
+import { ProofStamp } from './ProofStamp';
+import { isProofed } from '../lib/round';
 
 const MIN_DRAG_PX = 8;
 const HANDLES = ['nw', 'n', 'ne', 'w', 'e', 'sw', 's', 'se'] as const;
@@ -194,6 +197,8 @@ export function Board() {
       {board.imageRole === 'draft' && page.image && <LensToggle />}
       {page.image && <ImageRoleToggle role={board.imageRole} />}
       {page.image && paletteHoverColor.value && <PaletteHighlight page={page} cr={cr} hex={paletteHoverColor.value} />}
+      {board.round && <RoundCompare board={board} />}
+      {isProofed(board) && <ProofStamp />}
 
       {board.spots
         .filter((s) => s.pageId === page.id)

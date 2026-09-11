@@ -16,6 +16,11 @@ export function setKeep(spotId: string, keep: boolean): Recipe {
   return updateSpot(spotId, (s) => ({ ...s, keep }));
 }
 
+/** R2: 照合の○/×。○は直ったとみなしkeepも立てる(次の修正で壊させないため)。×はkeepを外す。 */
+export function setSpotCheck(spotId: string, check: 'ok' | 'ng'): Recipe {
+  return updateSpot(spotId, (s) => ({ ...s, check, keep: check === 'ok' }));
+}
+
 export function removeNote(spotId: string, noteId: string): Recipe {
   return updateSpot(spotId, (s) => ({ ...s, notes: s.notes.filter((n) => n.id !== noteId) }));
 }

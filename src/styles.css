@@ -1008,6 +1008,84 @@ button {
   flex-wrap: wrap;
 }
 
+/* R2: 照合 */
+.round-compare-image {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+}
+
+.round-compare-slider {
+  position: absolute;
+  left: var(--sp-2);
+  bottom: var(--sp-2);
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 4px var(--sp-2);
+  font-size: var(--fs-xs);
+  color: var(--muted-text);
+}
+
+.proof-stamp {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) rotate(-12deg);
+  z-index: 8;
+  border: 4px solid var(--vermilion);
+  color: var(--vermilion);
+  font-size: 40px;
+  font-weight: 700;
+  padding: 8px 16px;
+  border-radius: 8px;
+  pointer-events: none;
+  animation: proof-stamp-in 0.6s ease-out;
+}
+
+@keyframes proof-stamp-in {
+  0% { opacity: 0; transform: translate(-50%, -50%) rotate(-12deg) scale(2); }
+  100% { opacity: 1; transform: translate(-50%, -50%) rotate(-12deg) scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .proof-stamp {
+    animation: none;
+  }
+}
+
+.sheet-proofed {
+  background: var(--vermilion);
+  color: var(--paper);
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: 6px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.sheet-card-check {
+  display: flex;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-2);
+}
+
+.sheet-card-check .btn-sm.is-active {
+  background: var(--vermilion);
+  color: var(--paper);
+}
+
+.sheet-round-entry {
+  text-align: center;
+  cursor: pointer;
+}
+
 /* R1-c: ばらつき診断 */
 .audit-row {
   display: flex;

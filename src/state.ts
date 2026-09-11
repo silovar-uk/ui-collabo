@@ -96,6 +96,15 @@ export function openBoard(id: string): void {
   void kvSet(LAST_BOARD_KEY, id);
 }
 
+/** R2: すでに組み立て済みのボード(照合の再校など)をライブラリに足して開く。 */
+export function addAndOpenBoard(board: Board): void {
+  library.value = { ...library.value, boards: [...library.value.boards, board] };
+  currentBoardId.value = board.id;
+  selectedSpotId.value = null;
+  void kvSet(LAST_BOARD_KEY, board.id);
+  scheduleSave();
+}
+
 export function deleteBoard(id: string): void {
   library.value = { ...library.value, boards: library.value.boards.filter((b) => b.id !== id) };
   if (currentBoardId.value === id) currentBoardId.value = null;

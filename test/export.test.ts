@@ -124,6 +124,36 @@ describe('S10: 複数ページを取り違えない', () => {
   });
 });
 
+describe('R2: 照合の出力', () => {
+  it('roundボードはヘッダーの種類が再校になる', () => {
+    const board = makeDraftBoard();
+    board.round = { prevBoardId: 'prev', n: 2 };
+    const md = boardToMarkdown(board);
+    expect(md).toContain('種類: 修正指示(再校。前回の指示のうち未反映のものを含みます)');
+  });
+
+  it('carriedでcheck!==okの箇所は「前回も指示・未反映」が付く', () => {
+    const board = makeDraftBoard();
+    board.round = { prevBoardId: 'prev', n: 2 };
+    board.spots[0].carried = true;
+    board.spots[0].notes = [{ id: 'n1', kind: 'text', text: '', chips: ['静かに'] }];
+    const md = boardToMarkdown(board);
+    expect(md).toContain('(前回も指示・未反映)');
+  });
+
+  it('carriedでcheck===okの箇所は変えないものに「前回修正済み」付きで出る', () => {
+    const board = makeDraftBoard();
+    board.round = { prevBoardId: 'prev', n: 2 };
+    board.spots[0].carried = true;
+    board.spots[0].check = 'ok';
+    board.spots[0].keep = true;
+    board.spots[0].notes = [];
+    const md = boardToMarkdown(board);
+    expect(md).toContain('## 変えないもの');
+    expect(md).toContain('1 見出し(前回修正済み)');
+  });
+});
+
 describe('boardToExportJson', () => {
   it('画像のdataUrlを含まない', () => {
     const json = boardToExportJson(makeDraftBoard()) as { pages: { image: unknown }[] };
