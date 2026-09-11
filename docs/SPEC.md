@@ -75,6 +75,8 @@ export interface Spot {
   keep: boolean;
   notes: Note[];
   element?: ElementRef;   // HTMLページで要素をクリックして作った箇所のみ持つ
+  carried?: boolean;      // R2追加。前回の箇所を再校に持ち越したものか
+  check?: 'ok' | 'ng';    // R2追加。carried箇所の照合結果(○直った/×まだ)
 }
 
 export interface Rules {
@@ -99,6 +101,7 @@ export interface Board {
   rules: Rules;
   tone: { chips: string[]; text: string };   // 全体のひとこと
   order: string[];        // 見る順(spot id)
+  round?: { prevBoardId: string; n: number };  // R2追加。n=2で再校、3で三校
 }
 
 export interface RuleSet { id: string; name: string; rules: Rules; createdAt: string }
@@ -146,13 +149,38 @@ export interface Library {
 > px換算は幅1280px基準です。「変えないもの」は現状維持してください。
 ```
 
-`imageRole` によって以下の3パターンに分かれます。
+`imageRole` によって以下の3パターンに分かれます。`board.round` があるボード(照合の再校)は
+種類が「修正指示(再校。前回の指示のうち未反映のものを含みます)」に上書きされます。
 
 | imageRole | 種類 | 箇所の節 |
 |---|---|---|
 | `draft` | 修正指示(初校に対して) | `## 箇所ごと` に位置・大きさの差分を含めて出力 |
 | `reference` | 参考画像に基づく指定 | `## 箇所ごと` に「参考画像①の色 #xxxxxx を強調色に」の形で出力(位置の差分はなし) |
 | `null`(白紙) | 制作前の指定 | `## レイアウト` に「① タイトル: 左上(x 8%, y 10%, w 60%, h 12%)」の形で出力 |
+
+補足(S9・S10・R2):
+
+- ノートがなく、位置の差分もない箇所(囲っただけ)は `## 箇所ごと` に出しません(白紙の
+  `## レイアウト` は対象外。位置そのものが内容のため)
+- ページが2枚以上のボードは、箇所を `## p.1` / `## p.2` の見出しでページごとに分けます。
+  ヘッダーの対象・種類は1枚目だけでなく全ページを見て組み立てます
+- 照合(`board.round` あり)で `check: 'ok'` の箇所は `## 変えないもの` に
+  「(前回修正済み)」を添えて出力します。`carried: true` で `check !== 'ok'` の箇所は
+  見出し行に「(前回も指示・未反映)」を添えます
+
+## 指示文の行(`boardToLines`)
+
+`boardToMarkdown` は内部で `boardToLines(board): Line[]` を呼び、その `text` を連結しているだけです
+(`src/export.ts`)。`Line` は指示書(Sheet)の画面表示にも使われます。
+
+```ts
+export interface Line {
+  text: string;
+  spotId?: string;   // この行が対応する箇所
+  noteId?: string;   // この行を作ったノート(ある場合)
+  pageId?: string;   // ページ見出し行(`## p.N`)のみ
+}
+```
 
 修正指示(`draft`)の出力例:
 
@@ -190,12 +218,19 @@ export interface Library {
 - 4 ロゴ
 ```
 
-## 番号付き画像
+## 校正紙・番号付き画像
 
-ページごとにPNGを1枚生成します(`renderNumberedImage`)。①②③の墨色バッジ、朱色点線の目標箱、
-中心から中心への矢印を元画像解像度で焼き込みます。バッジ径は画像幅の2.5%(最小24px)です。
-HTMLページはcanvasに焼けないため対象外です(`board.pages.every((p) => !p.image)` のとき、書き出しの
-「番号付き画像」タブ自体を出しません)。
+「AIに渡す」1回目のクリップボード画像と、書き出しドロワーの既定は**校正紙**(`renderProofSheet`、
+R3)です。元画像の右に和紙色の余白(幅の45%、最小480px)を足し、箇所ごとに①②③の見出しと
+赤字の指示文を並べ、箇所の右辺から引き出し線を引きます。画像1枚だけをAIに渡しても、箇所と
+指示の両方が読めます。末尾に「変えないもの」も書きます。
+
+従来の**番号付き画像**(`renderNumberedImage`)は書き出しドロワーで選べます。①②③の墨色バッジ、
+朱色点線の目標箱、中心から中心への矢印を元画像解像度で焼き込みます。バッジ径は画像幅の2.5%
+(最小24px)です。
+
+どちらもHTMLページはcanvasに焼けないため対象外です(`board.pages.every((p) => !p.image)` のとき、
+書き出しの画像タブ自体を出しません)。
 
 ## HTMLページの指示文
 
