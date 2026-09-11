@@ -1,5 +1,5 @@
 import type { Board, ElementRef, ImageRole, Note, Page, Rect, Rules, Spot } from './schema';
-import { COLOR_DIRECTIONS, COLOR_ROLES, FONT_MOODS, LADDER_TABLE, MOTIONS, RELATIVE_CHIPS } from './vocab';
+import { COLOR_DIRECTIONS, COLOR_ROLES, FONT_MOODS, LADDER_TABLE, MOTIONS, relativeWordLabel } from './vocab';
 import { ruleRefOptions } from './lib/ruleRefs';
 import { resolveLadder } from './lib/htmlCss';
 import { resolveTargetStep } from './lib/ghost';
@@ -115,15 +115,16 @@ function formatNote(note: Note, ctx: NoteCtx): string {
       const def = LADDER_TABLE[note.attr];
       const target = note.target;
       const stepText = (step: number) => `${def.steps[step]}${def.unit ?? ''}`;
-      const chip = 'delta' in target ? RELATIVE_CHIPS.find((c) => c.delta === target.delta) : undefined;
+      // H2: 相対語は属性ごとの会話語(例: 余白なら「詰める/広げる」)にする
+      const relativeLabel = 'delta' in target ? relativeWordLabel(note.attr, target.delta) : undefined;
       // S7: currentがあれば「今 → こうしたい」の形で出力に届ける。deltaはcurrentを起点に解決する
       if (note.current !== undefined) {
         const toStep = resolveTargetStep(note);
         const to = toStep === null ? '' : stepText(toStep);
-        return `- ${def.label}: ${stepText(note.current)} → ${to}${chip ? `(${chip.label})` : ''}`;
+        return `- ${def.label}: ${stepText(note.current)} → ${to}${relativeLabel ? `(${relativeLabel})` : ''}`;
       }
       if ('step' in target) return `- ${def.label}: ${stepText(target.step)}`;
-      return `- ${def.label}: ${chip?.label ?? ''}`;
+      return `- ${def.label}: ${relativeLabel ?? ''}`;
     }
   }
 }
@@ -181,8 +182,8 @@ function formatHtmlNote(note: Note, element: ElementRef, ctx: NoteCtx): string {
     if (!resolved) return formatNote(note, ctx);
     const from = resolved.from ? `${resolved.from} → ` : '';
     const target = note.target;
-    const chip = 'delta' in target ? RELATIVE_CHIPS.find((c) => c.delta === target.delta) : undefined;
-    return `- ${def.label}: ${from}${resolved.to}${chip ? `(${chip.label})` : ''}`;
+    const relativeLabel = 'delta' in target ? relativeWordLabel(note.attr, target.delta) : undefined;
+    return `- ${def.label}: ${from}${resolved.to}${relativeLabel ? `(${relativeLabel})` : ''}`;
   }
   if (note.kind === 'color') {
     const cssKey = note.role === 'bg' ? 'background-color' : note.role === 'line' ? 'border-color' : 'color';

@@ -851,55 +851,79 @@ button {
   font-family: 'JetBrains Mono', monospace;
 }
 
-/* Ladder */
-.ladder-steps {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.ladder-step {
+/* Ladder(H2: 1行の目盛り) */
+.ladder {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 2px;
+  gap: var(--sp-2);
 }
 
-.ladder-thumb {
-  min-width: 40px;
-  min-height: 32px;
+.ladder-gauge {
+  display: flex;
+  flex-direction: column;
+  outline-offset: 2px;
+}
+
+.ladder-gauge-row {
+  display: flex;
+  width: 100%;
+}
+
+.ladder-cell {
+  flex: 1;
+  min-width: 0;
+  height: 18px;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  padding: 4px 8px;
+  background: none;
+  border: none;
+  border-top: 1px solid var(--line);
+  padding: 0;
+  color: var(--vermilion);
+  font-size: 10px;
+  line-height: 1;
+}
+
+.ladder-gauge-now .ladder-cell {
+  border-top: none;
+  border-bottom: 1px solid var(--line);
   color: var(--ink);
 }
 
-.ladder-thumb.is-target {
-  background: var(--vermilion);
-  border-color: var(--vermilion);
-  color: var(--paper);
+.ladder-gauge-now .ladder-cell:disabled {
+  cursor: default;
 }
 
-.ladder-thumb.is-auto-now {
-  box-shadow: inset 0 -3px 0 var(--ink);
-}
-
-.ladder-now {
-  font-size: 10px;
-  background: none;
-  border: 1px solid transparent;
+.ladder-value-label {
+  flex: 1;
+  min-width: 0;
+  text-align: center;
+  font-size: 9px;
   color: var(--muted-text);
-  border-radius: 4px;
-  padding: 0 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.ladder-now.is-now {
-  color: var(--vermilion);
-  border-color: var(--vermilion);
+.ladder-preview {
+  display: flex;
+  gap: var(--sp-4);
+  align-items: flex-end;
+  max-height: 64px;
+  overflow: hidden;
+}
+
+.ladder-preview-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+.ladder-preview-label {
+  font-size: 10px;
+  color: var(--muted-text);
 }
 
 .ladder-box {
@@ -973,11 +997,6 @@ button {
 
 .ladder-meter-bar.is-filled {
   background: var(--vermilion);
-}
-
-/* is-target の朱地に朱バーが埋もれないようにする */
-.ladder-thumb.is-target .ladder-meter-bar.is-filled {
-  background: var(--ink);
 }
 
 /* Font picker */

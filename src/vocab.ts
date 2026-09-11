@@ -22,7 +22,8 @@ export interface LadderDef {
 }
 
 export const LADDER_TABLE: Record<LadderAttr, LadderDef> = {
-  fontSize: { label: '文字サイズ', steps: [12, 14, 16, 18, 20, 24, 32, 40, 56], unit: 'px' },
+  // H2: Webの大見出し(64〜96px)を表せるよう末尾に72・96を追加。保存済みの段番号はずれない
+  fontSize: { label: '文字サイズ', steps: [12, 14, 16, 18, 20, 24, 32, 40, 56, 72, 96], unit: 'px' },
   weight: { label: '文字の太さ', steps: [300, 400, 500, 600, 700, 800] },
   spacing: { label: '余白', steps: [0, 4, 8, 12, 16, 24, 32, 48, 64], unit: 'px' },
   radius: { label: '角丸', steps: [0, 2, 4, 8, 12, 16, 24, 'full'], unit: 'px' },
@@ -40,6 +41,26 @@ export const RELATIVE_CHIPS: { delta: -2 | -1 | 1 | 2; label: string }[] = [
   { delta: 1, label: '少し大きく' },
   { delta: 2, label: 'ずっと大きく' },
 ];
+
+/** H2: 相対チップの言葉を属性ごとの会話語にする。 */
+export const RELATIVE_WORDS: Record<LadderAttr, { decrease: string; increase: string }> = {
+  fontSize: { decrease: '小さく', increase: '大きく' },
+  scale: { decrease: '小さく', increase: '大きく' },
+  weight: { decrease: '細く', increase: '太く' },
+  lineWidth: { decrease: '細く', increase: '太く' },
+  spacing: { decrease: '詰める', increase: '広げる' },
+  radius: { decrease: '角ばらせる', increase: '丸く' },
+  speed: { decrease: '速く', increase: 'ゆっくり' },
+  intensity: { decrease: '控えめに', increase: '強く' },
+};
+
+/** attr・deltaに合う会話語(例: 「少し小さく」)を返す。 */
+export function relativeWordLabel(attr: LadderAttr, delta: number): string {
+  const words = RELATIVE_WORDS[attr];
+  const word = delta < 0 ? words.decrease : words.increase;
+  const prefix = Math.abs(delta) >= 2 ? 'ずっと' : '少し';
+  return `${prefix}${word}`;
+}
 
 export function stepLabel(def: LadderDef, step: number): string {
   return `${def.steps[step]}${def.unit ?? ''}`;

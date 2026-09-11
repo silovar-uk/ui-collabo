@@ -1,4 +1,4 @@
-import { LADDER_TABLE, RELATIVE_CHIPS } from '../vocab';
+import { LADDER_TABLE, relativeWordLabel, RELATIVE_CHIPS } from '../vocab';
 import type { LadderAttr } from '../schema';
 
 interface Value {
@@ -56,47 +56,128 @@ function StepPreview({ attr, value }: { attr: LadderAttr; value: number | string
   }
 }
 
+function clampStep(max: number, i: number): number {
+  return Math.min(max, Math.max(0, i));
+}
+
+/**
+ * H2: 全段を実物で横一列に並べるのではなく、1行の目盛りにする。
+ * 上に朱の▼(こうしたい)、下に墨の▲(今)を置き、隙間そのものが「ズレ」を表す。
+ */
 export function Ladder({ attr, value, onChange, hideRelative, hideNow, autoNow }: Props) {
   const def = LADDER_TABLE[attr];
+  const lastStep = def.steps.length - 1;
   const targetStep = 'step' in value.target ? value.target.step : undefined;
+  const nowStep = autoNow ?? value.current;
+  const manualNow = autoNow === undefined;
+
+  function setTarget(step: number) {
+    onChange({ current: value.current, target: { step } });
+  }
+
+  function onSliderKeyDown(e: KeyboardEvent) {
+    if (targetStep === undefined) return;
+    if (e.key === 'ArrowRight' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      setTarget(clampStep(lastStep, targetStep + 1));
+    } else if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') {
+      e.preventDefault();
+      setTarget(clampStep(lastStep, targetStep - 1));
+    }
+  }
+
+  const valueText =
+    targetStep !== undefined
+      ? `${def.steps[targetStep]}${def.unit ?? ''}${
+          'delta' in value.target ? '' : nowStep !== undefined && nowStep !== targetStep ? `、今から${targetStep > nowStep ? '増やす' : '減らす'}` : ''
+        }`
+      : '';
 
   return (
     <div class="ladder">
-      {!hideRelative && (
-        <div class="chip-row">
-          {RELATIVE_CHIPS.map((c) => (
+      <div
+        class="ladder-gauge"
+        role="slider"
+        tabIndex={0}
+        aria-label={def.label}
+        aria-valuemin={0}
+        aria-valuemax={lastStep}
+        aria-valuenow={targetStep}
+        aria-valuetext={valueText}
+        onKeyDown={onSliderKeyDown}
+      >
+        <div class="ladder-gauge-row ladder-gauge-target">
+          {def.steps.map((_, i) => (
             <button
-              key={c.delta}
-              class={`chip${'delta' in value.target && value.target.delta === c.delta ? ' is-active' : ''}`}
-              onClick={() => onChange({ current: value.current, target: { delta: c.delta } })}
+              key={i}
+              class={`ladder-cell${targetStep === i ? ' is-target' : ''}`}
+              title={`${def.steps[i]}${def.unit ?? ''}`}
+              onClick={() => setTarget(i)}
             >
-              {c.label}
+              {targetStep === i ? '▼' : ''}
             </button>
           ))}
         </div>
-      )}
-      <div class="ladder-steps">
-        {def.steps.map((s, i) => (
-          <div class="ladder-step" key={i}>
-            <button
-              class={`ladder-thumb${targetStep === i ? ' is-target' : ''}${autoNow === i ? ' is-auto-now' : ''}`}
-              title={autoNow === i ? `${s}${def.unit ?? ''}(実測値から今はここ)` : `${s}${def.unit ?? ''}`}
-              onClick={() => onChange({ current: value.current, target: { step: i } })}
-            >
-              <StepPreview attr={attr} value={s} />
-            </button>
-            {!hideNow && autoNow === undefined && (
+        <div class="ladder-gauge-row ladder-gauge-values">
+          {def.steps.map((s, i) => (
+            <span key={i} class="ladder-cell ladder-value-label">
+              {s}
+              {def.unit ?? ''}
+            </span>
+          ))}
+        </div>
+        {!hideNow && (
+          <div class="ladder-gauge-row ladder-gauge-now">
+            {def.steps.map((_, i) => (
               <button
-                class={`ladder-now${value.current === i ? ' is-now' : ''}`}
-                title="今はこのくらい"
-                onClick={() => onChange({ ...value, current: i })}
+                key={i}
+                class={`ladder-cell${nowStep === i ? ' is-now' : ''}`}
+                disabled={!manualNow}
+                title={manualNow ? `今はこのくらい: ${def.steps[i]}${def.unit ?? ''}` : `実測値から今はここ: ${def.steps[i]}${def.unit ?? ''}`}
+                onClick={() => manualNow && onChange({ ...value, current: i })}
               >
-                今
+                {nowStep === i ? '▲' : ''}
               </button>
-            )}
+            ))}
           </div>
-        ))}
+        )}
       </div>
+
+      <div class="ladder-preview">
+        {!hideNow && (
+          <div class="ladder-preview-item">
+            <span class="ladder-preview-label">今</span>
+            {nowStep !== undefined ? <StepPreview attr={attr} value={def.steps[nowStep]} /> : <span class="muted">?</span>}
+          </div>
+        )}
+        {targetStep !== undefined && (
+          <div class="ladder-preview-item">
+            <span class="ladder-preview-label">こうしたい</span>
+            <StepPreview attr={attr} value={def.steps[targetStep]} />
+          </div>
+        )}
+      </div>
+
+      {!hideRelative && (
+        <div class="chip-row">
+          {RELATIVE_CHIPS.map((c) => {
+            const isActive = 'delta' in value.target && value.target.delta === c.delta;
+            const label = relativeWordLabel(attr, c.delta);
+            const toStep = value.current !== undefined ? clampStep(lastStep, value.current + c.delta) : undefined;
+            const withValue = toStep !== undefined ? `${label}(${def.steps[toStep]}${def.unit ?? ''})` : label;
+            return (
+              <button
+                key={c.delta}
+                class={`chip${isActive ? ' is-active' : ''}`}
+                aria-pressed={isActive}
+                onClick={() => onChange({ current: value.current, target: { delta: c.delta } })}
+              >
+                {withValue}
+              </button>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
