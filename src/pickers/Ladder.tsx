@@ -114,6 +114,8 @@ export function Ladder({ attr, value, onChange, hideRelative, hideNow, autoNow, 
               key={i}
               class={`ladder-cell${targetStep === i ? ' is-target' : ''}`}
               title={`${def.steps[i]}${def.unit ?? ''}`}
+              aria-label={`${def.steps[i]}${def.unit ?? ''}`}
+              aria-pressed={targetStep === i}
               onClick={() => setTarget(i)}
             >
               {targetStep === i ? '▼' : ''}
@@ -136,6 +138,8 @@ export function Ladder({ attr, value, onChange, hideRelative, hideNow, autoNow, 
                 class={`ladder-cell${nowStep === i ? ' is-now' : ''}`}
                 disabled={!manualNow}
                 title={manualNow ? `今はこのくらい: ${def.steps[i]}${def.unit ?? ''}` : `実測値から今はここ: ${def.steps[i]}${def.unit ?? ''}`}
+                aria-label={`今: ${def.steps[i]}${def.unit ?? ''}`}
+                aria-pressed={nowStep === i}
                 onClick={() => manualNow && onChange({ ...value, current: i })}
               >
                 {nowStep === i ? '▲' : ''}

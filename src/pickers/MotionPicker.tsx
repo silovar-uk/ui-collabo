@@ -19,6 +19,7 @@ function MotionBox({ id, label, active, duration, onPick }: { id: string; label:
   return (
     <button
       class={`motion-box${active ? ' is-active' : ''}`}
+      aria-pressed={active}
       onClick={() => {
         onPick();
         setTick((t) => t + 1);
@@ -57,7 +58,12 @@ export function MotionPicker({ value, onChange }: Props) {
         <span class="field-label">きっかけ</span>
         <div class="chip-row">
           {MOTION_TRIGGERS.map((t) => (
-            <button key={t.id} class={`chip${value.trigger === t.id ? ' is-active' : ''}`} onClick={() => onChange({ ...value, trigger: t.id })}>
+            <button
+              key={t.id}
+              class={`chip${value.trigger === t.id ? ' is-active' : ''}`}
+              aria-pressed={value.trigger === t.id}
+              onClick={() => onChange({ ...value, trigger: t.id })}
+            >
               {t.label}
             </button>
           ))}

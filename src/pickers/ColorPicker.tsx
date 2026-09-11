@@ -93,7 +93,12 @@ export function ColorPicker({ value: note, imageRole, hasImage, rulesPalette, on
 
       <div class="chip-row">
         {COLOR_ROLES.map((r) => (
-          <button key={r.id} class={`chip${note.role === r.id ? ' is-active' : ''}`} onClick={() => onChange({ role: r.id })}>
+          <button
+            key={r.id}
+            class={`chip${note.role === r.id ? ' is-active' : ''}`}
+            aria-pressed={note.role === r.id}
+            onClick={() => onChange({ role: r.id })}
+          >
             {r.label}
           </button>
         ))}
