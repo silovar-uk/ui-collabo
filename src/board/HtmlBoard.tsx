@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
-import { nextSpotNumber, selectedSpotId, undo, updateBoard } from '../state';
+import { lens, nextSpotNumber, selectedSpotId, spaceHeld, undo, updateBoard } from '../state';
 import { containRect, clampRect } from '../lib/geometry';
 import { useBoxSize } from '../lib/useBoxSize';
 import { attachPicker, readComputed, uniqueSelector } from '../lib/domPick';
 import { spotsToCss } from '../lib/htmlCss';
 import { SpotRect } from './SpotRect';
+import { LensToggle } from './LensToggle';
 import type { Board, ElementRef, Page, PageSource, Spot } from '../schema';
 
 function buildFrameHtml(source: PageSource): string {
@@ -30,8 +31,8 @@ export function HtmlBoard({ board, page }: { board: Board; page: Page }) {
   const source = page.source!;
   const [containerRef, boxSize] = useBoxSize<HTMLDivElement>();
   const iframeRef = useRef<HTMLIFrameElement>(null);
-  const [showCurrent, setShowCurrent] = useState(false);
   const [frameHtml] = useState(() => buildFrameHtml(source));
+  const showingBefore = spaceHeld.value || lens.value === 'before';
   const handlePickRef = useRef<(el: Element) => void>(() => {});
 
   // Board.tsx は触らない方針のため、削除/選択解除/取り消しのキー操作はここで独自に持つ
@@ -105,7 +106,7 @@ export function HtmlBoard({ board, page }: { board: Board; page: Page }) {
     if (!styleEl) return;
     const spots = board.spots.filter((s) => s.pageId === page.id);
     styleEl.textContent = spotsToCss(spots);
-    styleEl.disabled = showCurrent;
+    styleEl.disabled = showingBefore;
   });
 
   const cr = containRect(boxSize.width, boxSize.height, source.width, source.height);
@@ -128,14 +129,7 @@ export function HtmlBoard({ board, page }: { board: Board; page: Page }) {
             <SpotRect key={spot.id} spot={spot} cr={cr} selected={selectedSpotId.value === spot.id} onSelect={() => (selectedSpotId.value = spot.id)} />
           ))}
       </div>
-      <div class="html-board-toggle">
-        <button class={`btn-sm${showCurrent ? '' : ' is-active'}`} onClick={() => setShowCurrent(false)}>
-          こうしたい
-        </button>
-        <button class={`btn-sm${showCurrent ? ' is-active' : ''}`} onClick={() => setShowCurrent(true)}>
-          いま
-        </button>
-      </div>
+      <LensToggle />
     </div>
   );
 }

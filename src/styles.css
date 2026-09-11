@@ -254,6 +254,38 @@ button {
   background: repeating-linear-gradient(45deg, var(--paper), var(--paper) 10px, #fff 10px, #fff 20px);
 }
 
+/* Ghost(H1透かし) */
+.ghost-veil {
+  position: absolute;
+  background: rgba(247, 244, 238, 0.8);
+  pointer-events: none;
+}
+
+.ghost {
+  position: absolute;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.ghost-canvas {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+.ghost-badge {
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  font-size: 10px;
+  line-height: 1;
+  padding: 2px 4px;
+  border-radius: 3px;
+  background: rgba(28, 27, 25, 0.65);
+  color: var(--paper);
+}
+
 .page-strip {
   display: flex;
   gap: 8px;
@@ -1041,10 +1073,12 @@ button {
   pointer-events: auto;
 }
 
-.html-board-toggle {
+/* レンズ切替(H1)。画像ページ・HTMLページ共通。 */
+.lens-toggle {
   position: absolute;
   top: var(--sp-2);
   right: var(--sp-2);
+  z-index: 5;
   display: flex;
   gap: 4px;
   background: var(--panel);
@@ -1053,7 +1087,7 @@ button {
   padding: 2px;
 }
 
-.html-board-toggle .btn-sm.is-active {
+.lens-toggle .btn-sm.is-active {
   background: var(--ink);
   color: var(--paper);
 }

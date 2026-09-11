@@ -10,7 +10,7 @@ export function hslToHex([h, s, l]: Hsl): string {
   return rgbToHex(r, g, b);
 }
 
-function hexToRgb(hex: string): [number, number, number] {
+export function hexToRgb(hex: string): [number, number, number] {
   const m = hex.replace('#', '');
   const r = parseInt(m.slice(0, 2), 16);
   const g = parseInt(m.slice(2, 4), 16);

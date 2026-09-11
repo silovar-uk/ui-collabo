@@ -3,9 +3,11 @@ import {
   activePageId,
   colorPickRequest,
   currentBoard,
+  lens,
   nextSpotNumber,
   orderMode,
   selectedSpotId,
+  spaceHeld,
   toggleOrderSpot,
   undo,
   updateBoard,
@@ -13,9 +15,12 @@ import {
 import { containRect, nominalCanvasSize, pxToRatio, ratioToPx, clampRect } from '../lib/geometry';
 import { useBoxSize } from '../lib/useBoxSize';
 import { getSpotEditTarget } from '../lib/spotTarget';
+import { hasGhostEffect } from '../lib/ghost';
 import { sampleImageColor } from '../lib/image';
 import type { Rect, Spot } from '../schema';
 import { SpotRect } from './SpotRect';
+import { Ghost } from './Ghost';
+import { LensToggle } from './LensToggle';
 
 const MIN_DRAG_PX = 8;
 const HANDLES = ['nw', 'n', 'ne', 'w', 'e', 'sw', 's', 'se'] as const;
@@ -173,6 +178,13 @@ export function Board() {
       ) : (
         <div class="board-blank" />
       )}
+
+      {board.imageRole === 'draft' && page.image && !spaceHeld.value && lens.value === 'after' &&
+        board.spots
+          .filter((s) => s.pageId === page.id && hasGhostEffect(s))
+          .map((spot) => <Ghost key={spot.id} spot={spot} page={page} cr={cr} />)}
+
+      {board.imageRole === 'draft' && page.image && <LensToggle />}
 
       {board.spots
         .filter((s) => s.pageId === page.id)

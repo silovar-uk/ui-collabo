@@ -112,6 +112,11 @@ export const colorPickRequest = signal<{ onPick: (hex: string) => void } | null>
 /** 「見る順」モード。true の間、箇所クリックは選択ではなく見る順への追加/削除になる。 */
 export const orderMode = signal(false);
 
+/** レンズ(H1)。両ページ種別共通の「いま/こうしたい」切替。 */
+export const lens = signal<'after' | 'before'>('after');
+/** スペースキーを押している間だけtrue。両ボードでlensより優先し、一時的に「いま」を覗ける。 */
+export const spaceHeld = signal(false);
+
 export function toggleOrderSpot(id: string): void {
   updateBoard((b) => ({
     ...b,

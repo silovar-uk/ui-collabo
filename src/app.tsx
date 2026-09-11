@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'preact/hooks';
-import { activePageId, currentBoard, currentBoardId, ready, selectedSpotId, updateBoard } from './state';
+import { activePageId, currentBoard, currentBoardId, ready, selectedSpotId, spaceHeld, updateBoard } from './state';
 import { extractImageFiles } from './lib/image';
 import { handleFiles, handleHtml } from './lib/intake';
 import { Board } from './board/Board';
@@ -34,6 +34,29 @@ export function App() {
     }
     window.addEventListener('paste', onPaste);
     return () => window.removeEventListener('paste', onPaste);
+  }, []);
+
+  // レンズ(H1): スペースを押している間だけ「いま」を覗ける(写真編集ソフトの前後比較と同じ型)
+  useEffect(() => {
+    function isTypingTarget(el: EventTarget | null): boolean {
+      const tag = (el as HTMLElement | null)?.tagName;
+      return tag === 'INPUT' || tag === 'TEXTAREA';
+    }
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.code !== 'Space' || isTypingTarget(e.target)) return;
+      e.preventDefault();
+      spaceHeld.value = true;
+    }
+    function onKeyUp(e: KeyboardEvent) {
+      if (e.code !== 'Space') return;
+      spaceHeld.value = false;
+    }
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+    };
   }, []);
 
   if (!ready.value) return <div class="loading">読み込み中…</div>;
