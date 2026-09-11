@@ -17,7 +17,8 @@ export async function handleFiles(files: File[]): Promise<void> {
   if (files.length === 0) return;
   const pages = await filesToPages(files);
   if (!currentBoard.value) createBoard({ kind: 'web' });
-  updateBoard((b) => ({ ...b, pages: [...b.pages, ...pages] }));
+  // H4: 画像を初めて受け取ったボードはimageRole='draft'で始める(あとから切替可能)
+  updateBoard((b) => ({ ...b, imageRole: b.imageRole ?? 'draft', pages: [...b.pages, ...pages] }));
   activePageId.value = pages[0].id;
 }
 

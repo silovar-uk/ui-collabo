@@ -13,7 +13,6 @@ import { LibraryDrawer } from './panels/LibraryDrawer';
 import { HtmlIntakeDialog } from './panels/HtmlIntakeDialog';
 import { Toast } from './panels/Toast';
 import markSmallUrl from '../brand/mark-small.svg';
-import type { Board as BoardData } from './schema';
 
 type DrawerKind = 'export' | 'rules' | 'library' | null;
 
@@ -95,10 +94,8 @@ export function App() {
             <button class="btn-sm" onClick={() => setHtmlDialogOpen(true)}>HTMLを読み込む</button>
             <button class="btn-sm" onClick={() => setDrawer('rules')}>ルール</button>
             <button class="btn-sm" onClick={() => setDrawer('library')}>ライブラリ</button>
-            <button class="btn" onClick={() => setDrawer('export')}>
-              AIに渡す
-              {specifiedSpotCount(board) > 0 && <span class="btn-badge">{specifiedSpotCount(board)}</span>}
-            </button>
+            {/* H5: 主動線は指示書(Sheet)最下部の「AIに渡す」。ここはJSON・画像保存用のドロワーを開くだけ */}
+            <button class="btn-sm" onClick={() => setDrawer('export')}>書き出し</button>
           </>
         )}
       </header>
@@ -140,9 +137,4 @@ export function App() {
       <Toast />
     </div>
   );
-}
-
-/** 「AIに渡す」の進捗バッジ用。1つ以上ノートを持つか、残す指定がある箇所の数。 */
-function specifiedSpotCount(board: BoardData): number {
-  return board.spots.filter((s) => s.notes.length > 0 || s.keep).length;
 }

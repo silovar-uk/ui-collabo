@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
-import { boardToLines, hasSpecifiedContent, type Line } from '../export';
+import { boardToLines, boardToMarkdown, hasSpecifiedContent, renderNumberedImage, type Line } from '../export';
 import * as notes from '../lib/notes';
 import { hoverLine, hoverSpotId, orderMode, requestOpenCategory, selectedSpotId, updateBoard, type PaletteCategory } from '../state';
 import { TONE_CHIPS } from '../vocab';
@@ -7,6 +7,69 @@ import type { Board, Note, Spot } from '../schema';
 
 function categoryForNote(note: Note): PaletteCategory {
   return note.kind === 'ladder' ? 'ladder' : note.kind;
+}
+
+async function copyMarkdown(board: Board): Promise<void> {
+  await navigator.clipboard.writeText(boardToMarkdown(board));
+}
+
+function downloadBlob(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+async function numberedImageBlob(board: Board): Promise<Blob | null> {
+  const page = board.pages.find((p) => p.image);
+  if (!page?.image) return null;
+  const canvas = await renderNumberedImage({ image: page.image }, board.spots.filter((s) => s.pageId === page.id));
+  return new Promise((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('画像の生成に失敗しました'))), 'image/png'));
+}
+
+/** H5: 「AIに渡す」を1つのボタンで。画像があれば1回目で画像、2回目で指示文をコピーする。 */
+function ExportButton({ board }: { board: Board }) {
+  const [step, setStep] = useState<1 | 2>(1);
+  useEffect(() => setStep(1), [board.id]);
+  const hasImages = board.pages.some((p) => p.image);
+
+  async function handleClick() {
+    if (!hasImages) {
+      await copyMarkdown(board);
+      return;
+    }
+    if (step === 1) {
+      try {
+        const blob = await numberedImageBlob(board);
+        if (!blob) throw new Error('画像なし');
+        await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+        setStep(2);
+      } catch {
+        // 画像のコピーに失敗したら、PNGを保存して指示文をコピーする
+        try {
+          const blob = await numberedImageBlob(board);
+          if (blob) downloadBlob(blob, `${board.title || 'board'}.png`);
+        } catch {
+          /* 画像自体が作れない場合は諦めて指示文だけ渡す */
+        }
+        await copyMarkdown(board);
+      }
+      return;
+    }
+    await copyMarkdown(board);
+    setStep(1);
+  }
+
+  return (
+    <div class="sheet-export">
+      {hasImages && step === 2 && <p class="muted">AIの入力欄に画像を貼ったら、もう一度押してください</p>}
+      <button class="btn sheet-export-btn" onClick={handleClick}>
+        {hasImages && step === 2 ? '② 指示文をコピー' : 'AIに渡す'}
+      </button>
+    </div>
+  );
 }
 
 function lineKey(spotId: string, index: number): string {
@@ -241,6 +304,7 @@ export function Sheet({ board }: { board: Board }) {
         <EmptySpotCard key={spot.id} spot={spot} selected={selectedSpotId.value === spot.id} />
       ))}
       {order.length === 0 && emptySpots.length === 0 && <p class="muted sheet-empty">画像の上をドラッグして、気になる箇所を囲んでください。</p>}
+      <ExportButton board={board} />
     </div>
   );
 }

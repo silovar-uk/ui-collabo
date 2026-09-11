@@ -21,6 +21,7 @@ import type { Rect, Spot } from '../schema';
 import { SpotRect } from './SpotRect';
 import { Ghost } from './Ghost';
 import { LensToggle } from './LensToggle';
+import { ImageRoleToggle } from './ImageRoleToggle';
 import { Palette } from './Palette';
 
 const MIN_DRAG_PX = 8;
@@ -152,6 +153,7 @@ export function Board() {
           .map((spot) => <Ghost key={spot.id} spot={spot} page={page} cr={cr} />)}
 
       {board.imageRole === 'draft' && page.image && <LensToggle />}
+      {page.image && <ImageRoleToggle role={board.imageRole} />}
 
       {board.spots
         .filter((s) => s.pageId === page.id)
