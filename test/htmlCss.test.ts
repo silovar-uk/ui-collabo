@@ -44,7 +44,7 @@ describe('spotsToCss', () => {
       notes: [ladderNote({ delta: -1 })],
       element: { selector: '.hero > h1', tag: 'h1', computed: { 'font-size': '32px' } },
     };
-    expect(spotsToCss([spot])).toBe('.hero > h1 { font-size: 24px; }');
+    expect(spotsToCss([spot])).toBe('.hero > h1 { font-size: 24px !important; }');
   });
 
   it('elementを持たない箇所は無視する', () => {

@@ -10,7 +10,8 @@ import {
   undo,
   updateBoard,
 } from '../state';
-import { containRect, nominalCanvasSize, pxToRatio, ratioToPx, clampRect, type ContainRect } from '../lib/geometry';
+import { containRect, nominalCanvasSize, pxToRatio, ratioToPx, clampRect } from '../lib/geometry';
+import { useBoxSize } from '../lib/useBoxSize';
 import { getSpotEditTarget } from '../lib/spotTarget';
 import { sampleImageColor } from '../lib/image';
 import type { Rect, Spot } from '../schema';
@@ -27,7 +28,7 @@ function isTypingTarget(el: EventTarget | null): boolean {
 
 export function Board() {
   const board = currentBoard.value;
-  const containerRef = useRef<HTMLDivElement>(null);
+  const [containerRef, boxSize] = useBoxSize<HTMLDivElement>();
   const [draftPx, setDraftPx] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
   const [justCreatedId, setJustCreatedId] = useState<string | null>(null);
   const drag = useRef<{ mode: 'create' | 'move' | 'resize'; startX: number; startY: number; handle?: Handle; base?: Rect } | null>(null);
@@ -62,13 +63,7 @@ export function Board() {
 
   if (!board || !page) return null;
 
-  const cr = containRect(1000, 1000, canvasSize.width, canvasSize.height);
-
-  function getCr(): ContainRect {
-    const el = containerRef.current;
-    if (!el) return cr;
-    return containRect(el.clientWidth, el.clientHeight, canvasSize.width, canvasSize.height);
-  }
+  const cr = containRect(boxSize.width, boxSize.height, canvasSize.width, canvasSize.height);
 
   function nudgeSelected(dx: number, dy: number) {
     const spot = board!.spots.find((s) => s.id === selectedSpotId.value);
@@ -87,7 +82,7 @@ export function Board() {
 
     const pickReq = colorPickRequest.value;
     if (pickReq && page!.image) {
-      const ratio = pxToRatio({ x: startX, y: startY, w: 0, h: 0 }, getCr());
+      const ratio = pxToRatio({ x: startX, y: startY, w: 0, h: 0 }, cr);
       void sampleImageColor(page!.image, ratio.x, ratio.y).then((hex) => {
         pickReq.onPick(hex);
         colorPickRequest.value = null;
@@ -121,7 +116,7 @@ export function Board() {
       selectedSpotId.value = null;
       return;
     }
-    const liveCr = getCr();
+    const liveCr = cr;
     const ratio = clampRect(pxToRatio(d, liveCr));
     const n = nextSpotNumber(board!);
     const spot: Spot = { id: crypto.randomUUID(), pageId: page!.id, n, label: '', rect: ratio, keep: false, notes: [] };
@@ -141,7 +136,7 @@ export function Board() {
   function onBoxPointerMove(e: PointerEvent, spot: Spot) {
     const d = drag.current;
     if (!d || d.mode === 'create' || !d.base) return;
-    const liveCr = getCr();
+    const liveCr = cr;
     const dx = (e.clientX - d.startX) / liveCr.width;
     const dy = (e.clientY - d.startY) / liveCr.height;
     let next: Rect;
@@ -185,7 +180,7 @@ export function Board() {
           <SpotRect
             key={spot.id}
             spot={spot}
-            cr={getCr()}
+            cr={cr}
             selected={selectedSpotId.value === spot.id}
             justCreated={justCreatedId === spot.id}
             orderIndex={orderMode.value ? board.order.indexOf(spot.id) : -1}
@@ -206,7 +201,7 @@ export function Board() {
         const spot = board.spots.find((s) => s.id === selectedSpotId.value && s.pageId === page.id);
         if (!spot) return null;
         const t = getSpotEditTarget(board!, spot);
-        const px = ratioToPx(t.rect, getCr());
+        const px = ratioToPx(t.rect, cr);
         return (
           <div
             class={`edit-box${t.dashed ? ' dashed' : ''}`}

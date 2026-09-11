@@ -84,12 +84,12 @@ export function spotsToCss(spots: Spot[]): string {
         if (!cssKey) continue;
         const resolved = resolveLadder(note.attr, note, spot.element.computed);
         if (!resolved) continue;
-        decls.push(`${cssKey}: ${resolved.to};`);
+        decls.push(`${cssKey}: ${resolved.to} !important;`);
       } else if (note.kind === 'color') {
-        decls.push(`${colorCssKey(note.role)}: ${note.target};`);
+        decls.push(`${colorCssKey(note.role)}: ${note.target} !important;`);
       } else if (note.kind === 'font') {
         const mood = FONT_MOODS.find((m) => m.id === note.mood);
-        if (mood) decls.push(`font-family: ${mood.font}, ${mood.fallback};`);
+        if (mood) decls.push(`font-family: ${mood.font}, ${mood.fallback} !important;`);
       }
     }
     if (decls.length > 0) blocks.push(`${spot.element.selector} { ${decls.join(' ')} }`);

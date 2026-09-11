@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { nextSpotNumber, selectedSpotId, undo, updateBoard } from '../state';
 import { containRect, clampRect } from '../lib/geometry';
+import { useBoxSize } from '../lib/useBoxSize';
 import { attachPicker, readComputed, uniqueSelector } from '../lib/domPick';
 import { spotsToCss } from '../lib/htmlCss';
 import { SpotRect } from './SpotRect';
@@ -27,7 +28,7 @@ function isTypingTarget(el: EventTarget | null): boolean {
 
 export function HtmlBoard({ board, page }: { board: Board; page: Page }) {
   const source = page.source!;
-  const containerRef = useRef<HTMLDivElement>(null);
+  const [containerRef, boxSize] = useBoxSize<HTMLDivElement>();
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [showCurrent, setShowCurrent] = useState(false);
   const [frameHtml] = useState(() => buildFrameHtml(source));
@@ -107,10 +108,7 @@ export function HtmlBoard({ board, page }: { board: Board; page: Page }) {
     styleEl.disabled = showCurrent;
   });
 
-  const el = containerRef.current;
-  const cr = el
-    ? containRect(el.clientWidth, el.clientHeight, source.width, source.height)
-    : { left: 0, top: 0, width: source.width, height: source.height };
+  const cr = containRect(boxSize.width, boxSize.height, source.width, source.height);
   const scale = cr.width / source.width;
 
   return (

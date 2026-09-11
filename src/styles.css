@@ -230,6 +230,9 @@ button {
   width: 100%;
   max-width: 100%;
   margin: auto;
+  /* flex-shrink:0(既定の1のままだと、縦長ページで.board-columnの縦方向に押し縮められ
+     aspect-ratioが崩れる。0にすると縦にはみ出す代わりに列がスクロールし、比率が保たれる) */
+  flex-shrink: 0;
   background: var(--panel);
   border: 1px solid var(--line);
   box-shadow: 0 1px 3px rgba(28, 27, 25, 0.08);
