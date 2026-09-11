@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
-import { colorPickRequest, deleteSpot, pickerOpen, requestOpenCategory, updateBoard } from '../state';
+import { colorPickRequest, deleteSpot, measureRequest, pickerOpen, requestOpenCategory, updateBoard } from '../state';
 import * as notes from '../lib/notes';
 import { ruleRefOptions } from '../lib/ruleRefs';
 import { getSpotEditTarget } from '../lib/spotTarget';
@@ -17,6 +17,8 @@ import type { PaletteCategory } from '../state';
 type Category = PaletteCategory | null;
 const NUDGE = 0.02;
 const POPOVER_W = 300;
+// R1-a: 定規で測れる属性(長さとして意味を持つもの)
+const MEASURABLE_ATTRS: LadderAttr[] = ['fontSize', 'spacing', 'radius', 'lineWidth'];
 
 const TYPE_ROLES: { id: 'heading' | 'body' | 'caption'; label: string }[] = [
   { id: 'heading', label: '見出し' },
@@ -252,7 +254,22 @@ export function Palette({ board, spot, cr }: { board: Board; spot: Spot; cr: Con
               return (
                 <div class="note-block" key={attr}>
                   <span class="field-label">{LADDER_TABLE[attr].label}</span>
-                  <Ladder attr={attr} value={note} onChange={(v) => updateBoard(notes.setLadder(spot.id, attr, v))} autoNow={autoNowFor(attr)} />
+                  <Ladder
+                    attr={attr}
+                    value={note}
+                    onChange={(v) => updateBoard(notes.setLadder(spot.id, attr, v))}
+                    autoNow={autoNowFor(attr)}
+                    onMeasure={
+                      !spot.element && MEASURABLE_ATTRS.includes(attr)
+                        ? () => {
+                            measureRequest.value = {
+                              attr,
+                              onMeasure: (stepIndex) => updateBoard(notes.setLadder(spot.id, attr, { current: stepIndex, target: note.target })),
+                            };
+                          }
+                        : undefined
+                    }
+                  />
                   {attr === 'fontSize' && 'step' in note.target && (
                     <details class="note-details" open={hasAnyRules(board.rules)}>
                       <summary>このボードの基準にする</summary>

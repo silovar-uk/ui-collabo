@@ -1,6 +1,7 @@
 import { signal, computed, effect } from '@preact/signals';
 import { kvGet, kvSet } from './lib/storage';
-import { emptyLibrary, newBoard, SCHEMA, type Board, type Format, type Library, type RuleSet, type Rules, type Spot } from './schema';
+import { emptyLibrary, newBoard, SCHEMA, type Board, type Format, type LadderAttr, type Library, type RuleSet, type Rules, type Spot } from './schema';
+import type { ElementRecord } from './lib/audit';
 
 const LIBRARY_KEY = 'library';
 const LAST_BOARD_KEY = 'lastBoardId';
@@ -169,6 +170,12 @@ export function findSpot(board: Board, id: string): Spot | undefined {
  */
 export const colorPickRequest = signal<{ onPick: (hex: string) => void } | null>(null);
 
+/**
+ * R1-a: 定規で測る予約。null以外の間、ボードのドラッグは箇所作成ではなく長さの測定になり、
+ * 最寄りの段(ステップ番号)がonMeasureに渡される。書き込み先は呼び出し側がonMeasureに閉じ込める。
+ */
+export const measureRequest = signal<{ attr: LadderAttr; onMeasure: (stepIndex: number) => void } | null>(null);
+
 /** 「見る順」モード。true の間、箇所クリックは選択ではなく見る順への追加/削除になる。 */
 export const orderMode = signal(false);
 
@@ -183,6 +190,17 @@ export const spaceHeld = signal(false);
 export const hoverSpotId = signal<string | null>(null);
 /** 引き出し線(H3)を描くための、いまホバー中の行のキー。 */
 export const hoverLine = signal<{ spotId: string; lineKey: string } | null>(null);
+
+/** R1-b: 色の棚卸しでスウォッチにホバーしたときの、ボード上でのハイライト色。 */
+export const paletteHoverColor = signal<string | null>(null);
+
+// --- R1-c: HTMLページのばらつき診断 ---
+/** 表示中のHTMLページから集めた要素記録(HtmlBoardが更新する)。 */
+export const htmlAuditRecords = signal<ElementRecord[] | null>(null);
+/** 診断の値にホバーしたときに、iframe内で朱の点線囲みを出すセレクタ一覧。 */
+export const auditHoverSelectors = signal<string[] | null>(null);
+/** 「ルールで校正する」の要求。trueにするとHtmlBoardがルールから外れた要素を箇所にし、falseへ戻す。 */
+export const auditRuleCheckRequest = signal(false);
 
 export type PaletteCategory = 'position' | 'color' | 'font' | 'ladder' | 'motion' | 'text' | 'rule';
 /** Sheetの行をクリックすると、その行を作ったピッカーをPaletteで開く要求。Paletteが読んだら自分でnullに戻す。 */

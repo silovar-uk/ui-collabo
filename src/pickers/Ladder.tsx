@@ -15,6 +15,8 @@ interface Props {
   hideNow?: boolean;
   /** 実測値から算出した現在地の段。渡されると「今」ボタンの代わりにこの段へマーカーを自動表示する。 */
   autoNow?: number;
+  /** R1-a: 渡されると「定規で測る」ボタンを出す(画像ページの測定可能な属性のみ)。 */
+  onMeasure?: () => void;
 }
 
 function StepPreview({ attr, value }: { attr: LadderAttr; value: number | string }) {
@@ -64,7 +66,7 @@ function clampStep(max: number, i: number): number {
  * H2: 全段を実物で横一列に並べるのではなく、1行の目盛りにする。
  * 上に朱の▼(こうしたい)、下に墨の▲(今)を置き、隙間そのものが「ズレ」を表す。
  */
-export function Ladder({ attr, value, onChange, hideRelative, hideNow, autoNow }: Props) {
+export function Ladder({ attr, value, onChange, hideRelative, hideNow, autoNow, onMeasure }: Props) {
   const def = LADDER_TABLE[attr];
   const lastStep = def.steps.length - 1;
   const targetStep = 'step' in value.target ? value.target.step : undefined;
@@ -155,6 +157,11 @@ export function Ladder({ attr, value, onChange, hideRelative, hideNow, autoNow }
             <span class="ladder-preview-label">こうしたい</span>
             <StepPreview attr={attr} value={def.steps[targetStep]} />
           </div>
+        )}
+        {onMeasure && (
+          <button class="btn-sm ladder-measure-btn" onClick={onMeasure}>
+            📏 測る
+          </button>
         )}
       </div>
 

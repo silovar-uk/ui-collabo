@@ -1,12 +1,198 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { boardToLines, boardToMarkdown, hasSpecifiedContent, renderNumberedImage, type Line } from '../export';
 import * as notes from '../lib/notes';
-import { hoverLine, hoverSpotId, orderMode, requestOpenCategory, selectedSpotId, updateBoard, type PaletteCategory } from '../state';
+import { extractPalette, type PaletteColor } from '../lib/palette';
+import { tally, type TallyEntry } from '../lib/audit';
+import {
+  auditHoverSelectors,
+  auditRuleCheckRequest,
+  hoverLine,
+  hoverSpotId,
+  htmlAuditRecords,
+  orderMode,
+  paletteHoverColor,
+  requestOpenCategory,
+  selectedSpotId,
+  updateBoard,
+  type PaletteCategory,
+} from '../state';
 import { TONE_CHIPS } from '../vocab';
 import type { Board, Note, Spot } from '../schema';
 
 function categoryForNote(note: Note): PaletteCategory {
   return note.kind === 'ladder' ? 'ladder' : note.kind;
+}
+
+const PALETTE_ROLES: { role: 'bg' | 'text' | 'accent' | 'sub'; label: string }[] = [
+  { role: 'bg', label: '背景' },
+  { role: 'text', label: '文字' },
+  { role: 'accent', label: '強調' },
+  { role: 'sub', label: '補助' },
+];
+
+/** R1-b: この画面の色の棚卸し(画像ページのみ)。 */
+function ImagePaletteCard({ board }: { board: Board }) {
+  const [colors, setColors] = useState<PaletteColor[] | null>(null);
+  const page = board.pages.find((p) => p.image);
+  const dataUrl = page?.image?.dataUrl;
+
+  useEffect(() => {
+    if (!dataUrl) return;
+    let cancelled = false;
+    const img = new Image();
+    img.onload = () => {
+      if (cancelled) return;
+      const scale = 200 / Math.min(img.naturalWidth, img.naturalHeight);
+      const w = Math.max(1, Math.round(img.naturalWidth * scale));
+      const h = Math.max(1, Math.round(img.naturalHeight * scale));
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+      ctx.drawImage(img, 0, 0, w, h);
+      setColors(extractPalette(ctx.getImageData(0, 0, w, h).data));
+    };
+    img.src = dataUrl;
+    return () => {
+      cancelled = true;
+    };
+  }, [dataUrl]);
+
+  if (!page?.image || !colors || colors.length === 0) return null;
+
+  return (
+    <div class="sheet-card">
+      <span class="field-label">この画面の色</span>
+      <div class="palette-swatch-row">
+        {colors.map((c) => (
+          <div
+            key={c.hex}
+            class="palette-swatch-item"
+            onMouseEnter={() => (paletteHoverColor.value = c.hex)}
+            onMouseLeave={() => {
+              if (paletteHoverColor.value === c.hex) paletteHoverColor.value = null;
+            }}
+          >
+            <span class="swatch" style={{ background: c.hex }} />
+            <span class="muted">{c.hex}({Math.round(c.share * 100)}%)</span>
+            <div class="chip-row">
+              {PALETTE_ROLES.map(({ role, label }) => (
+                <button
+                  key={role}
+                  class="btn-sm"
+                  onClick={() =>
+                    updateBoard((b) => ({
+                      ...b,
+                      rules: { ...b.rules, palette: [...b.rules.palette.filter((p) => p.role !== role), { role, hex: c.hex }] },
+                    }))
+                  }
+                >
+                  {label}に
+                </button>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+const TYPE_ROLES: { role: 'heading' | 'body' | 'caption'; label: string }[] = [
+  { role: 'heading', label: '見出し' },
+  { role: 'body', label: '本文' },
+  { role: 'caption', label: '注釈' },
+];
+
+const AUDIT_KEYS: { key: 'fontSize' | 'color' | 'background' | 'radius'; label: string }[] = [
+  { key: 'fontSize', label: '文字サイズ' },
+  { key: 'color', label: '文字色' },
+  { key: 'background', label: '背景色' },
+  { key: 'radius', label: '角丸' },
+];
+
+function AuditRow({ entry, canPromote, onPromote }: { entry: TallyEntry; canPromote: boolean; onPromote?: (role: string) => void }) {
+  return (
+    <div
+      class="audit-row"
+      onMouseEnter={() => (auditHoverSelectors.value = entry.selectors)}
+      onMouseLeave={() => {
+        if (auditHoverSelectors.value === entry.selectors) auditHoverSelectors.value = null;
+      }}
+    >
+      <span class="muted">{entry.value}({entry.count})</span>
+      {canPromote && onPromote && (
+        <div class="chip-row">
+          {(entry.value.startsWith('#') || entry.value.startsWith('rgb')
+            ? PALETTE_ROLES.map((r) => ({ role: r.role, label: r.label }))
+            : TYPE_ROLES.map((r) => ({ role: r.role, label: r.label }))
+          ).map(({ role, label }) => (
+            <button key={role} class="btn-sm" onClick={() => onPromote(role)}>
+              {label}の基準に
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** R1-c: ばらつき診断(HTMLページのみ)。 */
+function HtmlAuditCard({ board }: { board: Board }) {
+  const records = htmlAuditRecords.value;
+  if (!records || records.length === 0) return null;
+
+  const tallies = AUDIT_KEYS.map(({ key, label }) => ({ key, label, entries: tally(records, key) }));
+  if (tallies.every((t) => t.entries.length === 0)) return null;
+
+  function promoteFontSize(px: string, role: 'heading' | 'body' | 'caption') {
+    const size = Math.round(parseFloat(px));
+    updateBoard((b) => {
+      const existing = b.rules.type.find((t) => t.role === role);
+      const type = existing ? b.rules.type.map((t) => (t.role === role ? { ...t, size } : t)) : [...b.rules.type, { role, size }];
+      return { ...b, rules: { ...b.rules, type } };
+    });
+  }
+
+  function promoteColor(hex: string, role: 'bg' | 'text' | 'accent' | 'sub') {
+    updateBoard((b) => ({ ...b, rules: { ...b.rules, palette: [...b.rules.palette.filter((p) => p.role !== role), { role, hex }] } }));
+  }
+
+  return (
+    <div class="sheet-card">
+      <span class="field-label">
+        {tallies.filter((t) => t.entries.length > 0).map((t) => `${t.label} ${t.entries.length}種類`).join(' / ')}
+      </span>
+      {tallies.map(
+        ({ key, label, entries }) =>
+          entries.length > 0 && (
+            <details key={key}>
+              <summary>{label}({entries.length}種類)</summary>
+              {entries.map((entry) => (
+                <AuditRow
+                  key={entry.value}
+                  entry={entry}
+                  canPromote={key === 'fontSize' || key === 'color' || key === 'background'}
+                  onPromote={
+                    key === 'fontSize'
+                      ? (role) => promoteFontSize(entry.value, role as 'heading' | 'body' | 'caption')
+                      : key === 'color' || key === 'background'
+                        ? (role) => promoteColor(entry.value, role as 'bg' | 'text' | 'accent' | 'sub')
+                        : undefined
+                  }
+                />
+              ))}
+            </details>
+          ),
+      )}
+      {(board.rules.type.length > 0 || board.rules.palette.length > 0) && (
+        <button class="btn-sm" onClick={() => (auditRuleCheckRequest.value = true)}>
+          ルールで校正する
+        </button>
+      )}
+    </div>
+  );
 }
 
 async function copyMarkdown(board: Board): Promise<void> {
@@ -295,6 +481,8 @@ export function Sheet({ board }: { board: Board }) {
   return (
     <div class="sheet">
       <BoardCard board={board} />
+      <ImagePaletteCard board={board} />
+      <HtmlAuditCard board={board} />
       {order.map((spotId) => {
         const spot = board.spots.find((s) => s.id === spotId);
         if (!spot) return null;
