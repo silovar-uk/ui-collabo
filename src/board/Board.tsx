@@ -21,6 +21,7 @@ import type { Rect, Spot } from '../schema';
 import { SpotRect } from './SpotRect';
 import { Ghost } from './Ghost';
 import { LensToggle } from './LensToggle';
+import { Palette } from './Palette';
 
 const MIN_DRAG_PX = 8;
 const HANDLES = ['nw', 'n', 'ne', 'w', 'e', 'sw', 's', 'se'] as const;
@@ -44,7 +45,7 @@ export function Board() {
   const cr = containRect(boxSize.width, boxSize.height, canvasSize.width, canvasSize.height);
 
   function onSurfacePointerDown(e: PointerEvent) {
-    if ((e.target as HTMLElement).closest('.spot-rect, .edit-box')) return;
+    if ((e.target as HTMLElement).closest('.spot-rect, .edit-box, .palette')) return;
     const el = containerRef.current;
     if (!el) return;
     const rectBox = el.getBoundingClientRect();
@@ -200,6 +201,13 @@ export function Board() {
           </div>
         );
       })()}
+
+      {!orderMode.value &&
+        !colorPickRequest.value &&
+        (() => {
+          const spot = board.spots.find((s) => s.id === selectedSpotId.value && s.pageId === page.id);
+          return spot ? <Palette board={board} spot={spot} cr={cr} /> : null;
+        })()}
     </div>
   );
 }

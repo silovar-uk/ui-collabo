@@ -177,6 +177,17 @@ export const lens = signal<'after' | 'before'>('after');
 /** スペースキーを押している間だけtrue。両ボードでlensより優先し、一時的に「いま」を覗ける。 */
 export const spaceHeld = signal(false);
 
+// --- H3: 指示書(Sheet)とパレット(Palette)の橋渡し ---
+
+/** Sheetの行にホバーすると、対応する箇所のボード上での強調に使う。 */
+export const hoverSpotId = signal<string | null>(null);
+/** 引き出し線(H3)を描くための、いまホバー中の行のキー。 */
+export const hoverLine = signal<{ spotId: string; lineKey: string } | null>(null);
+
+export type PaletteCategory = 'position' | 'color' | 'font' | 'ladder' | 'motion' | 'text' | 'rule';
+/** Sheetの行をクリックすると、その行を作ったピッカーをPaletteで開く要求。Paletteが読んだら自分でnullに戻す。 */
+export const requestOpenCategory = signal<{ spotId: string; category: PaletteCategory } | null>(null);
+
 export function toggleOrderSpot(id: string): void {
   updateBoard((b) => ({
     ...b,

@@ -51,10 +51,14 @@ function rgbToHsl(r: number, g: number, b: number): Hsl {
   return [h, s * 100, l * 100];
 }
 
-/** getComputedStyle が返す 'rgb(r, g, b)' / 'rgba(r, g, b, a)' を hex に正規化する。解釈できない場合は null。 */
+/**
+ * getComputedStyle が返す 'rgb(r, g, b)' / 'rgba(r, g, b, a)' を hex に正規化する。解釈できない場合と、
+ * 完全透明(alpha=0)の場合はnull(alphaを捨てたhexは「不透明な黒」と区別が付かなくなるため)。
+ */
 export function rgbStringToHex(value: string): string | null {
-  const m = value.match(/^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i);
+  const m = value.match(/^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)(?:\s*,\s*([\d.]+))?/i);
   if (!m) return null;
+  if (m[4] !== undefined && Number(m[4]) === 0) return null;
   return rgbToHex(Number(m[1]), Number(m[2]), Number(m[3]));
 }
 

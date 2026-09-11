@@ -1,13 +1,12 @@
 import { useEffect, useState } from 'preact/hooks';
-import { activePageId, currentBoard, currentBoardId, ready, selectedSpotId, spaceHeld, updateBoard } from './state';
+import { activePageId, currentBoard, currentBoardId, ready, selectedSpotId, spaceHeld } from './state';
 import { extractImageFiles } from './lib/image';
 import { handleFiles, handleHtml } from './lib/intake';
 import { Board } from './board/Board';
 import { HtmlBoard } from './board/HtmlBoard';
 import { Empty } from './panels/Empty';
-import { BoardPanel } from './panels/BoardPanel';
-import { SpotPanel } from './panels/SpotPanel';
-import { LivePreview } from './panels/LivePreview';
+import { Sheet } from './panels/Sheet';
+import { LeaderLine } from './panels/LeaderLine';
 import { ExportDrawer } from './panels/ExportDrawer';
 import { RulesDrawer } from './panels/RulesDrawer';
 import { LibraryDrawer } from './panels/LibraryDrawer';
@@ -63,7 +62,6 @@ export function App() {
   if (!ready.value) return <div class="loading">読み込み中…</div>;
 
   const board = currentBoard.value;
-  const spot = board?.spots.find((s) => s.id === selectedSpotId.value) ?? null;
   const page = board?.pages.find((p) => p.id === activePageId.value) ?? null;
 
   return (
@@ -129,17 +127,9 @@ export function App() {
             )}
           </div>
           <aside class="side-panel">
-            <div class="side-panel-top">
-              {board.imageRole === null && board.pages.some((p) => p.image) ? (
-                <ImageRolePrompt />
-              ) : spot ? (
-                <SpotPanel spot={spot} />
-              ) : (
-                <BoardPanel />
-              )}
-            </div>
-            <LivePreview board={board} selectedN={spot?.n ?? null} />
+            <Sheet board={board} />
           </aside>
+          <LeaderLine />
         </main>
       )}
 
@@ -155,20 +145,4 @@ export function App() {
 /** 「AIに渡す」の進捗バッジ用。1つ以上ノートを持つか、残す指定がある箇所の数。 */
 function specifiedSpotCount(board: BoardData): number {
   return board.spots.filter((s) => s.notes.length > 0 || s.keep).length;
-}
-
-function ImageRolePrompt() {
-  return (
-    <div class="panel-content">
-      <p class="field-label">この画像は?</p>
-      <div class="chip-row">
-        <button class="btn" onClick={() => updateBoard((b) => ({ ...b, imageRole: 'draft' }))}>
-          直したいもの
-        </button>
-        <button class="btn" onClick={() => updateBoard((b) => ({ ...b, imageRole: 'reference' }))}>
-          参考にしたいもの
-        </button>
-      </div>
-    </div>
-  );
 }

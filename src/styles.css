@@ -195,58 +195,118 @@ button {
 .side-panel {
   border-left: 1px solid var(--line);
   background: var(--panel);
-  display: grid;
-  grid-template-rows: 1fr auto;
-  min-height: 0;
-}
-
-.side-panel-top {
   overflow: auto;
-  padding: 20px;
   min-height: 0;
+  position: relative;
 }
 
-/* Live preview(指示文の常時表示) */
-.live-preview {
-  border-top: 1px solid var(--line);
-  max-height: 40vh;
+/* H3: 指示書(Sheet) */
+.sheet {
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  gap: var(--sp-3);
+  padding: 20px;
 }
 
-.live-preview summary {
-  padding: var(--sp-2) 20px;
-  font-size: var(--fs-sm);
+.sheet-empty {
+  padding: var(--sp-4) 0;
+}
+
+.sheet-card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: var(--sp-3);
+  background: var(--paper);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sheet-card-board {
+  gap: var(--sp-3);
+  background: var(--panel);
+}
+
+.sheet-card.is-selected {
+  border-color: var(--vermilion);
+  box-shadow: 0 0 0 2px rgba(228, 87, 46, 0.12);
+}
+
+.sheet-card-empty {
+  border-style: dashed;
   color: var(--muted-text);
   cursor: pointer;
-  user-select: none;
 }
 
-.live-preview[open] summary {
-  border-bottom: 1px solid var(--line);
+.sheet-card-head {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-2);
 }
 
-.live-preview-body {
+.sheet-card-head .field-inline {
+  white-space: nowrap;
+}
+
+.sheet-line {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-2);
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  border-radius: 4px;
+  padding: 3px var(--sp-2);
+  margin: 0 calc(var(--sp-2) * -1);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: var(--fs-sm);
+  white-space: pre-wrap;
+  color: var(--ink);
+}
+
+.sheet-line:hover {
+  background: rgba(28, 27, 25, 0.05);
+}
+
+.sheet-line-text {
   flex: 1;
-  overflow: auto;
-  padding: var(--sp-3) 20px var(--sp-4);
-  min-height: 0;
 }
 
-.live-preview-body .export-pre {
-  margin: 0;
+.sheet-line-remove {
+  color: var(--muted-text);
+  padding: 0 4px;
 }
 
-.live-preview-body .export-pre > div {
-  padding: 2px 0;
+.sheet-line-remove:hover {
+  color: var(--vermilion);
 }
 
-.live-preview-body .export-pre > div.is-current {
-  border-left: 2px solid var(--vermilion);
-  background: rgba(228, 87, 46, 0.06);
-  padding-left: var(--sp-2);
-  margin-left: calc(var(--sp-2) * -1);
+@keyframes sheet-line-flash {
+  0% { background: rgba(228, 87, 46, 0.35); }
+  100% { background: transparent; }
+}
+
+.sheet-line.is-flash {
+  animation: sheet-line-flash 0.6s ease-out;
+}
+
+/* 引き出し線(H3) */
+.leader-line-overlay {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  pointer-events: none;
+  z-index: 60;
+}
+
+.leader-line-overlay line {
+  stroke: var(--vermilion);
+  stroke-width: 1.5;
+  stroke-dasharray: 3 3;
 }
 
 /* Board surface */
@@ -359,6 +419,11 @@ button {
   box-shadow: 0 0 0 3px rgba(228, 87, 46, 0.15);
 }
 
+/* H3: 指示書の行にホバーしたときの強調 */
+.spot-rect.is-hovered {
+  box-shadow: 0 0 0 3px rgba(228, 87, 46, 0.3);
+}
+
 @keyframes spot-pulse {
   0% { box-shadow: 0 0 0 0 rgba(228, 87, 46, 0.35); }
   100% { box-shadow: 0 0 0 6px rgba(228, 87, 46, 0); }
@@ -443,6 +508,79 @@ button {
 .handle-sw { left: 0; top: 100%; cursor: nesw-resize; }
 .handle-s  { left: 50%; top: 100%; cursor: ns-resize; }
 .handle-se { left: 100%; top: 100%; cursor: nwse-resize; }
+
+/* H3: パレット(選択中の箇所の横に浮く朱のバー) */
+.palette {
+  position: absolute;
+  z-index: 10;
+}
+
+.palette-caption {
+  font-size: 10px;
+  color: var(--paper);
+  background: var(--ink);
+  border-radius: 4px;
+  padding: 2px 6px;
+  margin-bottom: 2px;
+  white-space: nowrap;
+}
+
+.element-selector-sm {
+  opacity: 0.7;
+}
+
+.palette-bar {
+  display: flex;
+  gap: 2px;
+  background: var(--ink);
+  border-radius: 6px;
+  padding: 3px;
+  box-shadow: 0 2px 8px rgba(28, 27, 25, 0.25);
+}
+
+.palette-btn {
+  min-width: 28px;
+  height: 26px;
+  padding: 0 6px;
+  background: none;
+  border: none;
+  border-radius: 4px;
+  color: var(--paper);
+  font-size: var(--fs-xs);
+  opacity: 0.75;
+}
+
+.palette-btn:hover {
+  background: rgba(247, 244, 238, 0.15);
+  opacity: 1;
+}
+
+.palette-btn.has-value {
+  background: var(--vermilion);
+  opacity: 1;
+}
+
+.palette-btn-danger:hover {
+  background: var(--vermilion);
+}
+
+/* ネイティブpopover(既定の枠・背景をリセットし、こちらのカード見た目に揃える) */
+.palette-pop {
+  position: fixed;
+  margin: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: var(--sp-3);
+  background: var(--panel);
+  box-shadow: 0 8px 24px rgba(28, 27, 25, 0.2);
+  width: 300px;
+  max-height: 70vh;
+  overflow: auto;
+}
+
+.palette-pop:not(:popover-open) {
+  display: none;
+}
 
 /* Panels */
 .panel-content {

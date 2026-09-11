@@ -7,6 +7,7 @@ import { attachPicker, readComputed, uniqueSelector } from '../lib/domPick';
 import { spotsToCss } from '../lib/htmlCss';
 import { SpotRect } from './SpotRect';
 import { LensToggle } from './LensToggle';
+import { Palette } from './Palette';
 import type { Board, ElementRef, Page, PageSource, Spot } from '../schema';
 
 function buildFrameHtml(source: PageSource): string {
@@ -110,6 +111,10 @@ export function HtmlBoard({ board, page }: { board: Board; page: Page }) {
           ))}
       </div>
       <LensToggle />
+      {(() => {
+        const spot = board.spots.find((s) => s.id === selectedSpotId.value && s.pageId === page.id);
+        return spot ? <Palette board={board} spot={spot} cr={cr} /> : null;
+      })()}
     </div>
   );
 }

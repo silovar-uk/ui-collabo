@@ -55,9 +55,17 @@ function formatTargetDelta(from: number, to: number, unit: '%' | 'px' = '%'): st
   return `${fromS} → ${toS}`;
 }
 
-function positionLines(spot: Spot): string[] {
+/** H3: 指示文の1行。spotId/noteIdがあれば、その行はボード上の箇所・ノートに対応する(クリックで操作できる)。 */
+export interface Line {
+  text: string;
+  spotId?: string;
+  noteId?: string;
+  pageId?: string;
+}
+
+function positionLines(spot: Spot): Line[] {
   if (!spot.targetRect) return [];
-  const lines: string[] = [];
+  const lines: Line[] = [];
   const { rect, targetRect } = spot;
   if (rect.x !== targetRect.x || rect.y !== targetRect.y) {
     const dir: string[] = [];
@@ -65,11 +73,11 @@ function positionLines(spot: Spot): string[] {
     if (targetRect.y > rect.y) dir.push(`下へ ${pct(targetRect.y - rect.y)}`);
     if (targetRect.x < rect.x) dir.push(`左へ ${pct(rect.x - targetRect.x)}`);
     if (targetRect.x > rect.x) dir.push(`右へ ${pct(targetRect.x - rect.x)}`);
-    lines.push(`- 位置: ${dir.join(' / ')}(${formatTargetDelta(rect.y, targetRect.y)})`);
+    lines.push({ text: `- 位置: ${dir.join(' / ')}(${formatTargetDelta(rect.y, targetRect.y)})`, spotId: spot.id });
   }
   if (rect.w !== targetRect.w || rect.h !== targetRect.h) {
     const ratio = targetRect.w / rect.w;
-    lines.push(`- 大きさ: 幅 ${formatTargetDelta(rect.w, targetRect.w)}(約${ratio.toFixed(1)}倍)`);
+    lines.push({ text: `- 大きさ: 幅 ${formatTargetDelta(rect.w, targetRect.w)}(約${ratio.toFixed(1)}倍)`, spotId: spot.id });
   }
   return lines;
 }
@@ -130,7 +138,7 @@ function formatNote(note: Note, ctx: NoteCtx): string {
 }
 
 /** S9: ノートなし・位置の差分なしの箇所(囲っただけ)は、指示文に含めない対象かどうか。 */
-function hasSpecifiedContent(spot: Spot, board: Board): boolean {
+export function hasSpecifiedContent(spot: Spot, board: Board): boolean {
   if (spot.notes.length > 0) return true;
   if (board.imageRole === 'draft' && spot.targetRect) {
     const { rect, targetRect } = spot;
@@ -151,27 +159,29 @@ function zoneLabel(r: Rect): string {
   return `${h}${v}`;
 }
 
-function layoutLine(spot: Spot, ctx: NoteCtx): string {
-  const lines = [`- ${spot.n} ${spot.label || `箇所${spot.n}`}: ${zoneLabel(spot.rect)}(${rectLabel(spot.rect)})`];
-  lines.push(...spot.notes.map((n) => `  ${formatNote(n, ctx)}`));
-  return lines.join('\n');
+function layoutLines(spot: Spot, ctx: NoteCtx): Line[] {
+  const lines: Line[] = [
+    { text: `- ${spot.n} ${spot.label || `箇所${spot.n}`}: ${zoneLabel(spot.rect)}(${rectLabel(spot.rect)})`, spotId: spot.id },
+  ];
+  for (const n of spot.notes) lines.push({ text: `  ${formatNote(n, ctx)}`, spotId: spot.id, noteId: n.id });
+  return lines;
 }
 
-function spotSection(spot: Spot, ctx: NoteCtx): string {
-  if (spot.element) return htmlSpotSection(spot, spot.element, ctx);
-  const lines = [`### ${spot.n} ${spot.label || `箇所${spot.n}`}(${rectLabel(spot.rect)})`];
+function spotSectionLines(spot: Spot, ctx: NoteCtx): Line[] {
+  if (spot.element) return htmlSpotSectionLines(spot, spot.element, ctx);
+  const lines: Line[] = [{ text: `### ${spot.n} ${spot.label || `箇所${spot.n}`}(${rectLabel(spot.rect)})`, spotId: spot.id }];
   // targetRect の差分は draft(今の状態がある)ときだけ意味を持つ
   if (ctx.imageRole === 'draft') lines.push(...positionLines(spot));
-  lines.push(...spot.notes.map((n) => formatNote(n, ctx)));
-  return lines.join('\n');
+  for (const n of spot.notes) lines.push({ text: formatNote(n, ctx), spotId: spot.id, noteId: n.id });
+  return lines;
 }
 
-function htmlSpotSection(spot: Spot, element: ElementRef, ctx: NoteCtx): string {
-  const lines = [`### ${spot.n} ${spot.label || `箇所${spot.n}`}  \`${element.selector}\``];
+function htmlSpotSectionLines(spot: Spot, element: ElementRef, ctx: NoteCtx): Line[] {
+  const lines: Line[] = [{ text: `### ${spot.n} ${spot.label || `箇所${spot.n}`}  \`${element.selector}\``, spotId: spot.id }];
   const textPart = element.text ? ` 「${element.text}」` : '';
-  lines.push(`- 要素: <${element.tag}>${textPart}`);
-  lines.push(...spot.notes.map((n) => formatHtmlNote(n, element, ctx)));
-  return lines.join('\n');
+  lines.push({ text: `- 要素: <${element.tag}>${textPart}`, spotId: spot.id });
+  for (const n of spot.notes) lines.push({ text: formatHtmlNote(n, element, ctx), spotId: spot.id, noteId: n.id });
+  return lines;
 }
 
 /** ラダー・色は実測値(element.computed)を使った「現在値 → 目標値」で出す。それ以外は既存のformatNoteと同じ形式。 */
@@ -205,7 +215,8 @@ function pageHeading(page: Page, index: number): string {
   return `## p.${index + 1}`;
 }
 
-export function boardToMarkdown(board: Board): string {
+/** H3: boardToMarkdownと同じ内容を、箇所・ノートに対応付けた行の配列で返す。 */
+export function boardToLines(board: Board): Line[] {
   const pages = board.pages;
   const page = pages[0];
   const activeSpots = board.spots.filter((s) => !s.keep);
@@ -214,93 +225,100 @@ export function boardToMarkdown(board: Board): string {
   const hasHtmlPage = pages.some((p) => p.source);
   const isMultiPage = pages.length > 1;
 
-  const parts: string[] = [hasHtmlPage ? HTML_PREAMBLE : PREAMBLE, '', `# デザイン指示: ${board.title}`, ''];
+  const lines: Line[] = [{ text: hasHtmlPage ? HTML_PREAMBLE : PREAMBLE }, { text: '' }, { text: `# デザイン指示: ${board.title}` }, { text: '' }];
   if (isMultiPage) {
     const formatLabel =
       board.format.kind === 'web' ? 'Web' : board.format.kind === 'slide' ? `スライド(${board.format.aspect})` : '白紙';
-    parts.push(`- 対象: ${formatLabel}、${pages.length}ページ`);
-    parts.push(`- 種類: ${hasHtmlPage ? 'コード修正指示(HTMLページに対して)' : docKind(board)}`);
+    lines.push({ text: `- 対象: ${formatLabel}、${pages.length}ページ` });
+    lines.push({ text: `- 種類: ${hasHtmlPage ? 'コード修正指示(HTMLページに対して)' : docKind(board)}` });
   } else if (page?.source) {
     const originPart = page.source.origin ? `(${page.source.origin})` : '';
-    parts.push(`- 対象: Webページ${originPart}、レンダリング幅 ${page.source.width}px`);
-    parts.push('- 種類: コード修正指示(HTMLページに対して)');
+    lines.push({ text: `- 対象: Webページ${originPart}、レンダリング幅 ${page.source.width}px` });
+    lines.push({ text: '- 種類: コード修正指示(HTMLページに対して)' });
   } else {
     const sizeLine = page?.image ? `、画像サイズ ${page.image.width}×${page.image.height}` : '';
     const formatLabel =
       board.format.kind === 'web' ? 'Web' : board.format.kind === 'slide' ? `スライド(${board.format.aspect})` : '白紙';
-    parts.push(`- 対象: ${formatLabel}${sizeLine}`);
-    parts.push(`- 種類: ${docKind(board)}`);
+    lines.push({ text: `- 対象: ${formatLabel}${sizeLine}` });
+    lines.push({ text: `- 種類: ${docKind(board)}` });
   }
-  parts.push('');
+  lines.push({ text: '' });
 
   if (board.rules.palette.length || board.rules.type.length || board.rules.spacing !== undefined || board.rules.motion.length || board.rules.tone.length) {
-    parts.push('## 基準ルール');
+    lines.push({ text: '## 基準ルール' });
     if (board.rules.palette.length) {
-      parts.push(`- 色: ${board.rules.palette.map((p) => `${PALETTE_ROLE_LABEL[p.role]} ${p.hex}`).join(' / ')}`);
+      lines.push({ text: `- 色: ${board.rules.palette.map((p) => `${PALETTE_ROLE_LABEL[p.role]} ${p.hex}`).join(' / ')}` });
     }
     if (board.rules.type.length) {
-      parts.push(
-        `- 文字: ${board.rules.type
+      lines.push({
+        text: `- 文字: ${board.rules.type
           .map((t) => {
             const mood = t.mood ? FONT_MOODS.find((m) => m.id === t.mood)?.label ?? t.mood : '';
             return `${TYPE_ROLE_LABEL[t.role]}=${mood}${t.size ? ` ${t.size}px` : ''}`;
           })
           .join(' / ')}`,
-      );
+      });
     }
     if (board.rules.spacing !== undefined) {
-      parts.push(`- 余白: 基準 ${LADDER_TABLE.spacing.steps[board.rules.spacing]}px`);
+      lines.push({ text: `- 余白: 基準 ${LADDER_TABLE.spacing.steps[board.rules.spacing]}px` });
     }
     if (board.rules.motion.length) {
-      parts.push(`- 動き: ${board.rules.motion.map((m) => `${MOTION_TRIGGER_LABEL[m.trigger]}=${MOTIONS.find((x) => x.id === m.motion)?.label ?? m.motion}`).join(' / ')}`);
+      lines.push({ text: `- 動き: ${board.rules.motion.map((m) => `${MOTION_TRIGGER_LABEL[m.trigger]}=${MOTIONS.find((x) => x.id === m.motion)?.label ?? m.motion}`).join(' / ')}` });
     }
     if (board.rules.tone.length) {
-      parts.push(`- トーン: ${board.rules.tone.join('、')}`);
+      lines.push({ text: `- トーン: ${board.rules.tone.join('、')}` });
     }
-    parts.push('');
+    lines.push({ text: '' });
   }
 
   if (board.tone.chips.length || board.tone.text) {
-    parts.push('## 全体');
+    lines.push({ text: '## 全体' });
     const chips = board.tone.chips.length ? `「${board.tone.chips.join('、')}」` : '';
     const text = board.tone.text ? `「${board.tone.text}」` : '';
-    if (chips || text) parts.push(`- ひとこと: ${[chips, text].filter(Boolean).join(' ')}`);
+    if (chips || text) lines.push({ text: `- ひとこと: ${[chips, text].filter(Boolean).join(' ')}` });
     if (board.order.length > 1) {
       const ordered = board.order
         .map((id) => board.spots.find((s) => s.id === id))
         .filter((s): s is Spot => !!s)
         .map((s) => `${s.n} ${s.label || ''}`.trim());
-      parts.push(`- 見る順: ${ordered.join(' → ')}`);
+      lines.push({ text: `- 見る順: ${ordered.join(' → ')}` });
     }
-    parts.push('');
+    lines.push({ text: '' });
   }
 
   const isBrief = board.imageRole === null;
   // S9: 白紙(レイアウト)は位置そのものが内容なので対象外。draft/referenceは中身のない箇所を渡さない
   const specifiedSpots = isBrief ? activeSpots : activeSpots.filter((s) => hasSpecifiedContent(s, board));
   if (specifiedSpots.length > 0) {
-    if (!isMultiPage) parts.push(isBrief ? '## レイアウト' : '## 箇所ごと');
+    if (!isMultiPage) lines.push({ text: isBrief ? '## レイアウト' : '## 箇所ごと' });
     for (const [pageIndex, p] of pages.entries()) {
       const pageSpots = specifiedSpots.filter((s) => s.pageId === p.id);
       if (pageSpots.length === 0) continue;
-      if (isMultiPage) parts.push(pageHeading(p, pageIndex));
+      if (isMultiPage) lines.push({ text: pageHeading(p, pageIndex), pageId: p.id });
       for (const spot of pageSpots) {
         const ctx: NoteCtx = { imageRole: board.imageRole, spotN: spot.n, rules: board.rules };
-        parts.push(isBrief ? layoutLine(spot, ctx) : spotSection(spot, ctx));
-        parts.push('');
+        lines.push(...(isBrief ? layoutLines(spot, ctx) : spotSectionLines(spot, ctx)));
+        lines.push({ text: '' });
       }
     }
   }
 
   if (keptSpots.length > 0) {
-    parts.push('## 変えないもの');
+    lines.push({ text: '## 変えないもの' });
     for (const spot of keptSpots) {
-      parts.push(`- ${spot.n} ${spot.label || `箇所${spot.n}`}`);
+      lines.push({ text: `- ${spot.n} ${spot.label || `箇所${spot.n}`}`, spotId: spot.id });
     }
-    parts.push('');
+    lines.push({ text: '' });
   }
 
-  return parts.join('\n').trimEnd() + '\n';
+  return lines;
+}
+
+export function boardToMarkdown(board: Board): string {
+  return boardToLines(board)
+    .map((l) => l.text)
+    .join('\n')
+    .trimEnd() + '\n';
 }
 
 /** JSON書き出し用。画像データURL・HTML本文(数百KBになり得る)は含まない。 */
