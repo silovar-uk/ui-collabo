@@ -16,13 +16,12 @@ export interface Rect {
   h: number;
 }
 
-/** 取り込んだHTMLページ。srcdocのiframeで表示する(sanitizeHtml済み)。 */
 export interface PageSource {
   kind: 'html';
   html: string; // サニタイズ済みのHTML全文
   title?: string; // <title> の中身
-  origin?: string; // 元URL。ユーザーの任意入力。<base> と出力の見出しに使う
-  useBase: boolean; // true のとき <base href={origin}> を注入する
+  origin?: string; // 元URL。ブックマークレット経由なら自動、貼り付けなら任意入力
+  allowExternal: boolean; // true のとき外部の画像・フォントの読み込みを許可する
   width: number; // レンダリングの論理幅。既定 1280
   height: number; // 読み込み後に実測した高さ
 }
@@ -31,7 +30,7 @@ export interface Page {
   id: string;
   label?: string;
   image: { dataUrl: string; width: number; height: number } | null;
-  source?: PageSource; // 追加。undefined なら従来どおりの画像/白紙ページ。image とは排他
+  source?: PageSource; // 追加。undefined なら従来どおりの画像/白紙ページ
 }
 
 export type LadderAttr =
@@ -102,6 +101,8 @@ export interface Spot {
   keep: boolean;
   notes: Note[];
   element?: ElementRef; // 追加。HTMLページで要素をクリックして作った箇所のみ持つ
+  carried?: boolean; // R2追加。前回の箇所を再校に持ち越したものか
+  check?: 'ok' | 'ng'; // R2追加。carried箇所の照合結果(○直った/×まだ)
 }
 
 export interface Rules {
@@ -129,6 +130,7 @@ export interface Board {
   rules: Rules;
   tone: { chips: string[]; text: string };
   order: string[];
+  round?: { prevBoardId: string; n: number }; // R2追加。n=2で再校、3で三校
 }
 
 export interface RuleSet {

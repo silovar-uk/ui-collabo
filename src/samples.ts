@@ -62,7 +62,7 @@ export const SAMPLES: { id: string; label: string; board: Board }[] = [
           rect: { x: 0.07, y: 0.29, w: 0.17, h: 0.045 },
           keep: false,
           notes: [
-            { id: 'note-2', kind: 'color', role: 'accent', current: '#3266cc', target: '#c94a1d', via: 'warm' },
+            { id: 'note-2', kind: 'color', role: 'accent', current: '#3266cc', target: '#c94a1d' },
             { id: 'note-3', kind: 'motion', motion: 'pop', trigger: 'enter', speed: 0.4, intensity: 2 },
           ],
         },

@@ -23,17 +23,21 @@ export function ColorPicker({ value: note, imageRole, hasImage, rulesPalette, on
   const isReference = imageRole === 'reference';
   const baseHex = isReference ? note.target : note.current;
   const nowLabel = isReference ? 'この色を使いたい' : '今の色';
+  // S8(破れ#5): hasImage(画像の有無)ではなくcurrentの有無で出し分ける。HTMLページの箇所も実測値がある
+  const showNow = isReference ? hasImage : baseHex !== undefined || hasImage;
 
   return (
     <div class="color-picker">
-      {hasImage && (
+      {showNow && (
         <div class="field-inline">
           <span class="field-label">{nowLabel}</span>
           {baseHex && <span class="swatch" style={{ background: baseHex }} />}
           <span class="muted">{baseHex ?? '未取得'}</span>
-          <button class="btn-sm" onClick={onRequestPick}>
-            スポイトで拾う
-          </button>
+          {hasImage && (
+            <button class="btn-sm" onClick={onRequestPick}>
+              スポイトで拾う
+            </button>
+          )}
         </div>
       )}
 
@@ -89,7 +93,12 @@ export function ColorPicker({ value: note, imageRole, hasImage, rulesPalette, on
 
       <div class="chip-row">
         {COLOR_ROLES.map((r) => (
-          <button key={r.id} class={`chip${note.role === r.id ? ' is-active' : ''}`} onClick={() => onChange({ role: r.id })}>
+          <button
+            key={r.id}
+            class={`chip${note.role === r.id ? ' is-active' : ''}`}
+            aria-pressed={note.role === r.id}
+            onClick={() => onChange({ role: r.id })}
+          >
             {r.label}
           </button>
         ))}

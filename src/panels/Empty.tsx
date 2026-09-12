@@ -1,8 +1,7 @@
-import { useState } from 'preact/hooks';
 import { cloneAndOpenBoard, createBoard, createFromTemplate, deleteBoard, deleteTemplate, library, openBoard, updateBoard } from '../state';
 import { handleFiles } from '../lib/intake';
 import { SAMPLES } from '../samples';
-import { HtmlIntakeDialog } from './HtmlIntakeDialog';
+import { EmptyGhostPreview } from './EmptyGhostPreview';
 import type { Format } from '../schema';
 import markUrl from '../../brand/mark.svg';
 
@@ -17,11 +16,13 @@ const FORMATS: { format: Format; label: string }[] = [
   { format: { kind: 'slide', aspect: '4:3' }, label: 'スライド 4:3' },
 ];
 
+// H6: 一往復で終わらない(R2)ことを、入口の手順自体にも表す。5の後ろで1へ戻る
 const STEPS = [
   { n: 1, verb: '貼る', desc: '画像を貼る' },
   { n: 2, verb: '囲う', desc: '気になる箇所を囲む' },
   { n: 3, verb: '選ぶ', desc: 'こうしたいを選ぶ' },
   { n: 4, verb: '渡す', desc: '指示文をコピーしてAIへ' },
+  { n: 5, verb: '照合', desc: '直った版を貼って確かめる' },
 ];
 
 function onFileInputChange(e: Event) {
@@ -31,10 +32,9 @@ function onFileInputChange(e: Event) {
   input.value = '';
 }
 
-export function Empty({ dragOver }: { dragOver: boolean }) {
+export function Empty({ dragOver, onOpenHtmlIntake }: { dragOver: boolean; onOpenHtmlIntake: () => void }) {
   const boards = library.value.boards;
   const templates = library.value.templates;
-  const [showHtmlDialog, setShowHtmlDialog] = useState(false);
 
   return (
     <div class="empty-screen">
@@ -52,14 +52,16 @@ export function Empty({ dragOver }: { dragOver: boolean }) {
           <p class="muted">Ctrl+V で貼り付け、またはクリックしてファイルを選ぶ</p>
           <input type="file" accept="image/*" multiple hidden onChange={onFileInputChange} />
         </label>
-        <button class="btn-sm empty-html-btn" onClick={() => setShowHtmlDialog(true)}>
-          または、HTMLを読み込む
+
+        <button class="btn-sm" onClick={onOpenHtmlIntake}>
+          HTMLを読み込む
         </button>
 
         <div class="empty-samples">
           <h2>まず触ってみる</h2>
+          <EmptyGhostPreview />
           <ul class="board-list">
-            {SAMPLES.map((sample) => (
+            {SAMPLES.slice(1).map((sample) => (
               <li key={sample.id}>
                 <button class="board-list-item" onClick={() => cloneAndOpenBoard(sample.board)}>
                   {sample.label}
@@ -71,11 +73,12 @@ export function Empty({ dragOver }: { dragOver: boolean }) {
       </div>
 
       <ol class="empty-steps">
-        {STEPS.map((s) => (
+        {STEPS.map((s, i) => (
           <li key={s.n}>
             <span class="empty-step-n">{s.n}</span>
             <span class="empty-step-verb">{s.verb}</span>
             <span class="empty-step-desc">{s.desc}</span>
+            {i === STEPS.length - 1 && <span class="empty-step-loop" aria-hidden="true">↺</span>}
           </li>
         ))}
       </ol>
@@ -128,8 +131,6 @@ export function Empty({ dragOver }: { dragOver: boolean }) {
           )}
         </details>
       )}
-
-      {showHtmlDialog && <HtmlIntakeDialog onClose={() => setShowHtmlDialog(false)} />}
     </div>
   );
 }

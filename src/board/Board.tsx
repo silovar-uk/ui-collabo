@@ -1,84 +1,62 @@
-import { useEffect, useRef, useState } from 'preact/hooks';
+import { useRef, useState } from 'preact/hooks';
 import {
   activePageId,
   colorPickRequest,
   currentBoard,
+  lens,
+  measureRequest,
   nextSpotNumber,
   orderMode,
+  paletteHoverColor,
   selectedSpotId,
+  spaceHeld,
   toggleOrderSpot,
-  undo,
   updateBoard,
 } from '../state';
-import { containRect, nominalCanvasSize, pxToRatio, ratioToPx, clampRect, type ContainRect } from '../lib/geometry';
+import { containRect, nominalCanvasSize, pxToRatio, ratioToPx, clampRect } from '../lib/geometry';
+import { useBoxSize } from '../lib/useBoxSize';
+import { useBoardKeys } from '../lib/useBoardKeys';
 import { getSpotEditTarget } from '../lib/spotTarget';
+import { hasGhostEffect } from '../lib/ghost';
 import { sampleImageColor } from '../lib/image';
+import { nearestStepIndex } from '../lib/htmlCss';
 import type { Rect, Spot } from '../schema';
 import { SpotRect } from './SpotRect';
+import { Ghost } from './Ghost';
+import { LensToggle } from './LensToggle';
+import { ImageRoleToggle } from './ImageRoleToggle';
+import { Palette } from './Palette';
+import { PaletteHighlight } from './PaletteHighlight';
+import { RoundCompare } from './RoundCompare';
+import { ProofStamp } from './ProofStamp';
+import { isProofed } from '../lib/round';
 
 const MIN_DRAG_PX = 8;
 const HANDLES = ['nw', 'n', 'ne', 'w', 'e', 'sw', 's', 'se'] as const;
 type Handle = (typeof HANDLES)[number];
 
-function isTypingTarget(el: EventTarget | null): boolean {
-  const tag = (el as HTMLElement | null)?.tagName;
-  return tag === 'INPUT' || tag === 'TEXTAREA';
-}
-
 export function Board() {
   const board = currentBoard.value;
-  const containerRef = useRef<HTMLDivElement>(null);
+  const [containerRef, boxSize] = useBoxSize<HTMLDivElement>();
   const [draftPx, setDraftPx] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
   const [justCreatedId, setJustCreatedId] = useState<string | null>(null);
-  const drag = useRef<{ mode: 'create' | 'move' | 'resize'; startX: number; startY: number; handle?: Handle; base?: Rect } | null>(null);
+  const drag = useRef<{ mode: 'create' | 'move' | 'resize' | 'measure'; startX: number; startY: number; handle?: Handle; base?: Rect } | null>(null);
   const [, force] = useState(0);
+  // R1-a: 定規。measureLineはドラッグ中の線、measureResultは離した後2秒だけ残す寸法線
+  const [measureLine, setMeasureLine] = useState<{ x1: number; y1: number; x2: number; y2: number } | null>(null);
+  const [measureResult, setMeasureResult] = useState<{ x1: number; y1: number; x2: number; y2: number; label: string } | null>(null);
+
+  useBoardKeys();
 
   const page = board?.pages.find((p) => p.id === activePageId.value) ?? null;
   const canvasSize = page?.image ? { width: page.image.width, height: page.image.height } : nominalCanvasSize(board?.format ?? { kind: 'web' });
 
-  useEffect(() => {
-    function onKeyDown(e: KeyboardEvent) {
-      if (isTypingTarget(e.target)) return;
-      if (!board) return;
-      if (e.key === 'Escape') {
-        selectedSpotId.value = null;
-      } else if ((e.key === 'Delete' || e.key === 'Backspace') && selectedSpotId.value) {
-        const id = selectedSpotId.value;
-        updateBoard((b) => ({ ...b, spots: b.spots.filter((s) => s.id !== id) }));
-        selectedSpotId.value = null;
-      } else if (e.key === 'z' && (e.ctrlKey || e.metaKey)) {
-        undo();
-      } else if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key) && selectedSpotId.value) {
-        e.preventDefault();
-        const step = e.shiftKey ? 0.05 : 0.01;
-        const dx = e.key === 'ArrowLeft' ? -step : e.key === 'ArrowRight' ? step : 0;
-        const dy = e.key === 'ArrowUp' ? -step : e.key === 'ArrowDown' ? step : 0;
-        nudgeSelected(dx, dy);
-      }
-    }
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  });
-
   if (!board || !page) return null;
 
-  const cr = containRect(1000, 1000, canvasSize.width, canvasSize.height);
-
-  function getCr(): ContainRect {
-    const el = containerRef.current;
-    if (!el) return cr;
-    return containRect(el.clientWidth, el.clientHeight, canvasSize.width, canvasSize.height);
-  }
-
-  function nudgeSelected(dx: number, dy: number) {
-    const spot = board!.spots.find((s) => s.id === selectedSpotId.value);
-    if (!spot) return;
-    const t = getSpotEditTarget(board!, spot);
-    t.apply(clampRect({ x: t.rect.x + dx, y: t.rect.y + dy, w: t.rect.w, h: t.rect.h }));
-  }
+  const cr = containRect(boxSize.width, boxSize.height, canvasSize.width, canvasSize.height);
 
   function onSurfacePointerDown(e: PointerEvent) {
-    if ((e.target as HTMLElement).closest('.spot-rect, .edit-box')) return;
+    if ((e.target as HTMLElement).closest('.spot-rect, .edit-box, .palette')) return;
     const el = containerRef.current;
     if (!el) return;
     const rectBox = el.getBoundingClientRect();
@@ -87,11 +65,18 @@ export function Board() {
 
     const pickReq = colorPickRequest.value;
     if (pickReq && page!.image) {
-      const ratio = pxToRatio({ x: startX, y: startY, w: 0, h: 0 }, getCr());
+      const ratio = pxToRatio({ x: startX, y: startY, w: 0, h: 0 }, cr);
       void sampleImageColor(page!.image, ratio.x, ratio.y).then((hex) => {
         pickReq.onPick(hex);
         colorPickRequest.value = null;
       });
+      return;
+    }
+
+    if (measureRequest.value) {
+      drag.current = { mode: 'measure', startX, startY };
+      el.setPointerCapture(e.pointerId);
+      setMeasureLine({ x1: startX, y1: startY, x2: startX, y2: startY });
       return;
     }
 
@@ -101,18 +86,43 @@ export function Board() {
   }
 
   function onSurfacePointerMove(e: PointerEvent) {
-    if (!drag.current || drag.current.mode !== 'create') return;
+    if (!drag.current) return;
     const el = containerRef.current;
     if (!el) return;
     const rectBox = el.getBoundingClientRect();
     const curX = e.clientX - rectBox.left;
     const curY = e.clientY - rectBox.top;
+    if (drag.current.mode === 'measure') {
+      setMeasureLine((cur) => (cur ? { ...cur, x2: curX, y2: curY } : cur));
+      return;
+    }
+    if (drag.current.mode !== 'create') return;
     const { startX, startY } = drag.current;
     setDraftPx({ x: Math.min(startX, curX), y: Math.min(startY, curY), w: Math.abs(curX - startX), h: Math.abs(curY - startY) });
   }
 
   function onSurfacePointerUp() {
-    if (!drag.current || drag.current.mode !== 'create') return;
+    if (!drag.current) return;
+    if (drag.current.mode === 'measure') {
+      drag.current = null;
+      const line = measureLine;
+      setMeasureLine(null);
+      const req = measureRequest.value;
+      measureRequest.value = null;
+      if (!line || !req) return;
+      const lengthBoardPx = Math.hypot(line.x2 - line.x1, line.y2 - line.y1);
+      if (lengthBoardPx < MIN_DRAG_PX) return;
+      // 1280基準pxへ換算(表示幅比 × 1280。画像の実ピクセル幅には依存しない)
+      const length1280 = (lengthBoardPx / cr.width) * 1280;
+      // ponytail: 文字サイズは字面の高さから概算する近似係数。和文と欧文で字面の高さが違うため厳密ではない
+      const value = req.attr === 'fontSize' ? length1280 / 0.8 : length1280;
+      const stepIndex = nearestStepIndex(req.attr, value);
+      req.onMeasure(stepIndex);
+      setMeasureResult({ ...line, label: `約${Math.round(value)}px` });
+      setTimeout(() => setMeasureResult(null), 2000);
+      return;
+    }
+    if (drag.current.mode !== 'create') return;
     drag.current = null;
     const d = draftPx;
     setDraftPx(null);
@@ -121,7 +131,7 @@ export function Board() {
       selectedSpotId.value = null;
       return;
     }
-    const liveCr = getCr();
+    const liveCr = cr;
     const ratio = clampRect(pxToRatio(d, liveCr));
     const n = nextSpotNumber(board!);
     const spot: Spot = { id: crypto.randomUUID(), pageId: page!.id, n, label: '', rect: ratio, keep: false, notes: [] };
@@ -141,7 +151,7 @@ export function Board() {
   function onBoxPointerMove(e: PointerEvent, spot: Spot) {
     const d = drag.current;
     if (!d || d.mode === 'create' || !d.base) return;
-    const liveCr = getCr();
+    const liveCr = cr;
     const dx = (e.clientX - d.startX) / liveCr.width;
     const dy = (e.clientY - d.startY) / liveCr.height;
     let next: Rect;
@@ -166,7 +176,7 @@ export function Board() {
 
   return (
     <div
-      class={`board-surface${colorPickRequest.value ? ' is-picking-color' : ''}${orderMode.value ? ' is-order-mode' : ''}`}
+      class={`board-surface${colorPickRequest.value ? ' is-picking-color' : ''}${measureRequest.value ? ' is-measuring' : ''}${orderMode.value ? ' is-order-mode' : ''}`}
       ref={containerRef}
       style={{ aspectRatio: `${canvasSize.width} / ${canvasSize.height}` }}
       onPointerDown={(e) => onSurfacePointerDown(e as unknown as PointerEvent)}
@@ -179,13 +189,24 @@ export function Board() {
         <div class="board-blank" />
       )}
 
+      {board.imageRole === 'draft' && page.image && !spaceHeld.value && lens.value === 'after' &&
+        board.spots
+          .filter((s) => s.pageId === page.id && hasGhostEffect(s))
+          .map((spot) => <Ghost key={spot.id} spot={spot} page={page} cr={cr} />)}
+
+      {board.imageRole === 'draft' && page.image && <LensToggle />}
+      {page.image && <ImageRoleToggle role={board.imageRole} />}
+      {page.image && paletteHoverColor.value && <PaletteHighlight page={page} cr={cr} hex={paletteHoverColor.value} />}
+      {board.round && <RoundCompare board={board} />}
+      {isProofed(board) && <ProofStamp />}
+
       {board.spots
         .filter((s) => s.pageId === page.id)
         .map((spot) => (
           <SpotRect
             key={spot.id}
             spot={spot}
-            cr={getCr()}
+            cr={cr}
             selected={selectedSpotId.value === spot.id}
             justCreated={justCreatedId === spot.id}
             orderIndex={orderMode.value ? board.order.indexOf(spot.id) : -1}
@@ -201,12 +222,28 @@ export function Board() {
 
       {draftPx && <div class="spot-rect draft" style={{ left: draftPx.x, top: draftPx.y, width: draftPx.w, height: draftPx.h }} />}
 
+      {(measureLine || measureResult) && (
+        <svg class="ruler-overlay">
+          <line
+            x1={(measureLine ?? measureResult)!.x1}
+            y1={(measureLine ?? measureResult)!.y1}
+            x2={(measureLine ?? measureResult)!.x2}
+            y2={(measureLine ?? measureResult)!.y2}
+          />
+          {measureResult && (
+            <text x={(measureResult.x1 + measureResult.x2) / 2} y={(measureResult.y1 + measureResult.y2) / 2 - 6}>
+              {measureResult.label}
+            </text>
+          )}
+        </svg>
+      )}
+
       {(() => {
         if (orderMode.value || colorPickRequest.value) return null;
         const spot = board.spots.find((s) => s.id === selectedSpotId.value && s.pageId === page.id);
         if (!spot) return null;
         const t = getSpotEditTarget(board!, spot);
-        const px = ratioToPx(t.rect, getCr());
+        const px = ratioToPx(t.rect, cr);
         return (
           <div
             class={`edit-box${t.dashed ? ' dashed' : ''}`}
@@ -227,6 +264,13 @@ export function Board() {
           </div>
         );
       })()}
+
+      {!orderMode.value &&
+        !colorPickRequest.value &&
+        (() => {
+          const spot = board.spots.find((s) => s.id === selectedSpotId.value && s.pageId === page.id);
+          return spot ? <Palette board={board} spot={spot} cr={cr} /> : null;
+        })()}
     </div>
   );
 }

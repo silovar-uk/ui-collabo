@@ -1,5 +1,6 @@
 import type { ContainRect } from '../lib/geometry';
 import { ratioToPx } from '../lib/geometry';
+import { hoverSpotId } from '../state';
 import type { Spot } from '../schema';
 
 interface Props {
@@ -18,9 +19,11 @@ const LABEL_MIN_HEIGHT = 28;
 export function SpotRect({ spot, cr, selected, orderIndex = -1, justCreated = false, onSelect }: Props) {
   const px = ratioToPx(spot.rect, cr);
   const isCompact = px.h < LABEL_MIN_HEIGHT;
+  const hovered = hoverSpotId.value === spot.id;
   return (
     <div
-      class={`spot-rect${selected ? ' is-selected' : ''}${spot.keep ? ' is-kept' : ''}${isCompact ? ' is-compact' : ''}${justCreated ? ' is-new' : ''}`}
+      data-spot-id={spot.id}
+      class={`spot-rect${selected ? ' is-selected' : ''}${spot.keep ? ' is-kept' : ''}${isCompact ? ' is-compact' : ''}${justCreated ? ' is-new' : ''}${hovered ? ' is-hovered' : ''}`}
       style={{ left: px.x, top: px.y, width: px.w, height: px.h }}
       title={isCompact ? spot.label : undefined}
       onPointerDown={(e) => {

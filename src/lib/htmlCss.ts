@@ -1,8 +1,8 @@
+import { FONT_MOODS, LADDER_TABLE } from '../vocab';
 import type { ComputedKey, LadderAttr, Note, Spot } from '../schema';
-import { FONT_MOODS, LADDER_TABLE, type LadderDef } from '../vocab';
 
-/** ラダー属性 → 反映・出力に使うCSSプロパティ。対応なし(scale/speed/intensity)は null。 */
-export const LADDER_PROP: Partial<Record<LadderAttr, ComputedKey>> = {
+/** ラダー属性のうち、実測CSSプロパティに対応するものだけを持つ。scale/speed/intensityは対応先がない。 */
+export const LADDER_TO_CSS: Partial<Record<LadderAttr, ComputedKey>> = {
   fontSize: 'font-size',
   weight: 'font-weight',
   spacing: 'margin',
@@ -10,76 +10,89 @@ export const LADDER_PROP: Partial<Record<LadderAttr, ComputedKey>> = {
   lineWidth: 'border-width',
 };
 
-/** 色ノートの役割 → CSSプロパティ。 */
-export const COLOR_PROP: Record<'text' | 'bg' | 'accent' | 'line', ComputedKey> = {
-  text: 'color',
-  bg: 'background-color',
-  accent: 'color',
-  line: 'border-color',
-};
+function ladderValue(attr: LadderAttr, step: number): string {
+  const def = LADDER_TABLE[attr];
+  const raw = def.steps[step];
+  return raw === 'full' ? '9999px' : `${raw}${def.unit ?? ''}`;
+}
 
-export interface ResolvedLadder {
-  from: string;
+export function parseNumber(value: string): number | null {
+  const m = value.match(/-?\d+(\.\d+)?/);
+  return m ? parseFloat(m[0]) : null;
+}
+
+export function nearestStepIndex(attr: LadderAttr, current: number): number {
+  const steps = LADDER_TABLE[attr].steps;
+  let best = 0;
+  let bestDiff = Infinity;
+  steps.forEach((s, i) => {
+    if (typeof s !== 'number') return;
+    const diff = Math.abs(s - current);
+    if (diff < bestDiff) {
+      bestDiff = diff;
+      best = i;
+    }
+  });
+  return best;
+}
+
+export interface LadderResolution {
+  from: string | null;
   to: string;
 }
 
-function stepToCss(def: LadderDef, idx: number): string {
-  const raw = def.steps[idx];
-  if (raw === 'full') return '9999px';
-  return `${raw}${def.unit ?? ''}`;
-}
-
 /**
- * ラダーの目標値を現在値から解決する。step指定はそのまま採用、delta指定は現在値に最も近い段から
- * delta分ずらした段を採用する(範囲外はクランプ)。出力(export.ts)と反映(spotsToCss)の両方がここを使う。
+ * ラダーノートを実際のCSS値に解決する。stepは段をそのまま採用、deltaは実測値から
+ * 最も近い段を探し、そこへdeltaを足した段を採用する。実測値もCSSマッピングもなければnull。
  */
-export function resolveLadder(attr: LadderAttr, note: Extract<Note, { kind: 'ladder' }>, computed?: string): ResolvedLadder | null {
+export function resolveLadder(
+  attr: LadderAttr,
+  note: Extract<Note, { kind: 'ladder' }>,
+  computed: Partial<Record<ComputedKey, string>>,
+): LadderResolution | null {
   const def = LADDER_TABLE[attr];
-  const target = note.target;
+  const cssKey = LADDER_TO_CSS[attr];
+  const fromRaw = cssKey ? computed[cssKey] : undefined;
 
-  if ('step' in target) {
-    return { from: computed ?? '', to: stepToCss(def, target.step) };
+  if ('step' in note.target) {
+    return { from: fromRaw ?? null, to: ladderValue(attr, note.target.step) };
   }
 
-  if (!computed) return null;
-  const currentNum = parseFloat(computed);
-  if (Number.isNaN(currentNum)) return null;
-
-  let nearestIdx = 0;
-  let nearestDiff = Infinity;
-  def.steps.forEach((s, i) => {
-    if (typeof s !== 'number') return;
-    const diff = Math.abs(s - currentNum);
-    if (diff < nearestDiff) {
-      nearestDiff = diff;
-      nearestIdx = i;
-    }
-  });
-  const idx = Math.min(def.steps.length - 1, Math.max(0, nearestIdx + target.delta));
-  return { from: computed, to: stepToCss(def, idx) };
+  if (!fromRaw) return null;
+  const currentNum = parseNumber(fromRaw);
+  if (currentNum === null) return null;
+  const nearest = nearestStepIndex(attr, currentNum);
+  const clamped = Math.min(def.steps.length - 1, Math.max(0, nearest + note.target.delta));
+  return { from: fromRaw, to: ladderValue(attr, clamped) };
 }
 
-/** element を持つ箇所のノートを、その場反映用のCSSに変換する。selector { prop: value; ... } の連結。 */
+function colorCssKey(role: 'text' | 'bg' | 'accent' | 'line' | undefined): 'color' | 'background-color' | 'border-color' {
+  if (role === 'bg') return 'background-color';
+  if (role === 'line') return 'border-color';
+  return 'color';
+}
+
+/** element を持つ箇所のノートを、プレビューに当てるCSS文字列へ変換する。 */
 export function spotsToCss(spots: Spot[]): string {
-  const rules: string[] = [];
+  const blocks: string[] = [];
   for (const spot of spots) {
     if (!spot.element) continue;
     const decls: string[] = [];
     for (const note of spot.notes) {
       if (note.kind === 'ladder') {
-        const prop = LADDER_PROP[note.attr];
-        if (!prop) continue;
-        const resolved = resolveLadder(note.attr, note, spot.element.computed[prop]);
-        if (resolved) decls.push(`${prop}: ${resolved.to};`);
+        const cssKey = LADDER_TO_CSS[note.attr];
+        if (!cssKey) continue;
+        const resolved = resolveLadder(note.attr, note, spot.element.computed);
+        if (!resolved) continue;
+        decls.push(`${cssKey}: ${resolved.to} !important;`);
       } else if (note.kind === 'color') {
-        const prop = COLOR_PROP[note.role ?? 'accent'];
-        decls.push(`${prop}: ${note.target};`);
+        decls.push(`${colorCssKey(note.role)}: ${note.target} !important;`);
       } else if (note.kind === 'font') {
         const mood = FONT_MOODS.find((m) => m.id === note.mood);
-        if (mood) decls.push(`font-family: '${mood.font}', ${mood.fallback};`);
+        if (mood) decls.push(`font-family: ${mood.font}, ${mood.fallback} !important;`);
       }
     }
-    if (decls.length > 0) rules.push(`${spot.element.selector} { ${decls.join(' ')} }`);
+    if (decls.length > 0) blocks.push(`${spot.element.selector} { ${decls.join(' ')} }`);
   }
-  return rules.join('\n');
+  return blocks.join('\n');
 }

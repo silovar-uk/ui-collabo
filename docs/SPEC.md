@@ -23,22 +23,32 @@ export type ImageRole = 'draft' | 'reference';   // 直したいもの / 参考�
 
 export interface Rect { x: number; y: number; w: number; h: number }  // 0..1、ボード比
 
-/** 取り込んだHTMLページ。srcdocのiframeで表示する(sanitizeHtml済み)。image とは排他。 */
-export interface PageSource {
-  kind: 'html';
-  html: string;        // サニタイズ済みのHTML全文(script/on*属性/javascript:URLを除去済み)
-  title?: string;       // <title> の中身
-  origin?: string;      // 元URL。ユーザーの任意入力。<base> と出力の見出しに使う
-  useBase: boolean;     // true のとき <base href={origin}> を注入する(元サイトへ通信する唯一の経路)
-  width: number;        // レンダリングの論理幅。既定 1280
-  height: number;       // 読み込み後に実測した高さ
-}
-
 export interface Page {
   id: string;
   label?: string;
   image: { dataUrl: string; width: number; height: number } | null;  // 白紙は null
-  source?: PageSource;   // HTMLページのときのみ持つ
+  source?: PageSource;   // HTMLページのときのみ。imageとは排他(HTMLページは image: null)
+}
+
+export interface PageSource {
+  kind: 'html';
+  html: string;             // サニタイズ済みのHTML全文(script等を除去済み)
+  title?: string;           // 取り込み時の <title>
+  origin?: string;          // 元URL。ブックマークレット経由なら自動、貼り付けなら任意入力
+  allowExternal: boolean;   // true のとき外部の画像・フォントの読み込みを許可する
+  width: number;            // レンダリングの論理幅。既定 1280
+  height: number;           // 読み込み後に実測した高さ
+}
+
+export type ComputedKey = 'font-size' | 'font-weight' | 'font-family'
+  | 'color' | 'background-color' | 'border-color'
+  | 'margin' | 'padding' | 'border-radius' | 'border-width';
+
+export interface ElementRef {
+  selector: string;         // 一意なCSSセレクタ
+  tag: string;               // 'h1' など小文字のタグ名
+  text?: string;              // textContent の先頭40文字
+  computed: Partial<Record<ComputedKey, string>>;  // 取り込み時点の実測値
 }
 
 export type LadderAttr = 'fontSize' | 'weight' | 'spacing' | 'radius'
@@ -55,28 +65,18 @@ export type Note =
   | { id: string; kind: 'rule'; ruleRef: string }                    // 例: 'type.body.size'、'palette.accent'
   | { id: string; kind: 'text'; text: string; chips: string[] };
 
-/** 取り込み時点で実測した、出力と反映に使うCSSプロパティ。 */
-export type ComputedKey = 'font-size' | 'font-weight' | 'font-family'
-  | 'color' | 'background-color' | 'border-color'
-  | 'margin' | 'padding' | 'border-radius' | 'border-width';
-
-export interface ElementRef {
-  selector: string;        // 一意なCSSセレクタ(id → tag.class → 祖先パス → nth-childの順で解決)
-  tag: string;              // 'h1' など小文字のタグ名
-  text?: string;             // textContent の先頭40文字
-  computed: Partial<Record<ComputedKey, string>>;  // 取り込み時点の実測値
-}
-
 export interface Spot {
   id: string;
   pageId: string;
   n: number;              // ①②③ の番号。ページを跨いで通し番号
   label: string;
-  rect: Rect;             // 今(白紙・参考では「置きたい位置」。HTMLページでは要素のbounding box)
+  rect: Rect;             // 今(白紙・参考では「置きたい位置」)
   targetRect?: Rect;      // こうしたい位置・大きさ。draft のときのみ意味を持つ
   keep: boolean;
   notes: Note[];
-  element?: ElementRef;   // HTMLページで要素をクリックして作った箇所のみ持つ。矩形のドラッグ移動は無効になる
+  element?: ElementRef;   // HTMLページで要素をクリックして作った箇所のみ持つ
+  carried?: boolean;      // R2追加。前回の箇所を再校に持ち越したものか
+  check?: 'ok' | 'ng';    // R2追加。carried箇所の照合結果(○直った/×まだ)
 }
 
 export interface Rules {
@@ -101,6 +101,7 @@ export interface Board {
   rules: Rules;
   tone: { chips: string[]; text: string };   // 全体のひとこと
   order: string[];        // 見る順(spot id)
+  round?: { prevBoardId: string; n: number };  // R2追加。n=2で再校、3で三校
 }
 
 export interface RuleSet { id: string; name: string; rules: Rules; createdAt: string }
@@ -120,8 +121,8 @@ export interface Library {
 
 ## JSON書き出し(「AIに渡す」→ JSON タブ)
 
-`Board` から `pages[].image.dataUrl` と `pages[].source.html` を除いたものです(`src/export.ts` の `boardToExportJson`)。
-`spots[].element`(セレクタ・実測値)はそのまま含まれます。
+`Board` から `pages[].image.dataUrl` と `pages[].source.html`(数百KBになり得る)を除いたものです
+(`src/export.ts` の `boardToExportJson`)。HTMLページの `title` / `origin` / `allowExternal` / `width` / `height` は残ります。
 
 ```json
 {
@@ -148,13 +149,38 @@ export interface Library {
 > px換算は幅1280px基準です。「変えないもの」は現状維持してください。
 ```
 
-`imageRole` によって以下の3パターンに分かれます。
+`imageRole` によって以下の3パターンに分かれます。`board.round` があるボード(照合の再校)は
+種類が「修正指示(再校。前回の指示のうち未反映のものを含みます)」に上書きされます。
 
 | imageRole | 種類 | 箇所の節 |
 |---|---|---|
 | `draft` | 修正指示(初校に対して) | `## 箇所ごと` に位置・大きさの差分を含めて出力 |
 | `reference` | 参考画像に基づく指定 | `## 箇所ごと` に「参考画像①の色 #xxxxxx を強調色に」の形で出力(位置の差分はなし) |
 | `null`(白紙) | 制作前の指定 | `## レイアウト` に「① タイトル: 左上(x 8%, y 10%, w 60%, h 12%)」の形で出力 |
+
+補足(S9・S10・R2):
+
+- ノートがなく、位置の差分もない箇所(囲っただけ)は `## 箇所ごと` に出しません(白紙の
+  `## レイアウト` は対象外。位置そのものが内容のため)
+- ページが2枚以上のボードは、箇所を `## p.1` / `## p.2` の見出しでページごとに分けます。
+  ヘッダーの対象・種類は1枚目だけでなく全ページを見て組み立てます
+- 照合(`board.round` あり)で `check: 'ok'` の箇所は `## 変えないもの` に
+  「(前回修正済み)」を添えて出力します。`carried: true` で `check !== 'ok'` の箇所は
+  見出し行に「(前回も指示・未反映)」を添えます
+
+## 指示文の行(`boardToLines`)
+
+`boardToMarkdown` は内部で `boardToLines(board): Line[]` を呼び、その `text` を連結しているだけです
+(`src/export.ts`)。`Line` は指示書(Sheet)の画面表示にも使われます。
+
+```ts
+export interface Line {
+  text: string;
+  spotId?: string;   // この行が対応する箇所
+  noteId?: string;   // この行を作ったノート(ある場合)
+  pageId?: string;   // ページ見出し行(`## p.N`)のみ
+}
+```
 
 修正指示(`draft`)の出力例:
 
@@ -192,16 +218,31 @@ export interface Library {
 - 4 ロゴ
 ```
 
-### HTMLページの出力例
+## 校正紙・番号付き画像
 
-`page.source` があるページでは前置き・ヘッダー・箇所の節が専用の形式に変わります。矩形の`%`座標は
-出さず、代わりにCSSセレクタと`getComputedStyle`の実測値(現在→目標)を出します。
+「AIに渡す」1回目のクリップボード画像と、書き出しドロワーの既定は**校正紙**(`renderProofSheet`、
+R3)です。元画像の右に和紙色の余白(幅の45%、最小480px)を足し、箇所ごとに①②③の見出しと
+赤字の指示文を並べ、箇所の右辺から引き出し線を引きます。画像1枚だけをAIに渡しても、箇所と
+指示の両方が読めます。末尾に「変えないもの」も書きます。
+
+従来の**番号付き画像**(`renderNumberedImage`)は書き出しドロワーで選べます。①②③の墨色バッジ、
+朱色点線の目標箱、中心から中心への矢印を元画像解像度で焼き込みます。バッジ径は画像幅の2.5%
+(最小24px)です。
+
+どちらもHTMLページはcanvasに焼けないため対象外です(`board.pages.every((p) => !p.image)` のとき、
+書き出しの画像タブ自体を出しません)。
+
+## HTMLページの指示文
+
+`page.source` があるページでは、前置き・ヘッダー・箇所の節がすべて専用の形式に変わります。
+`spot.element` を持つ箇所は、`rect` の%表記の代わりにCSSセレクタと実測値を使います。
 
 ```markdown
 > 以下はWebページの修正指示です。各項目の `セレクタ` は、対象ページに対するCSSセレクタです。
-> 「現在」は取り込み時点の getComputedStyle の実測値です。「変えないもの」は現状維持してください。
+> 「現在」は取り込み時点の getComputedStyle の実測値です。
+> 「変えないもの」は現状維持してください。
 
-# デザイン指示: LP改善案
+# デザイン指示: サービス紹介ページ
 
 - 対象: Webページ(https://example.com/)、レンダリング幅 1280px
 - 種類: コード修正指示(HTMLページに対して)
@@ -210,11 +251,9 @@ export interface Library {
 ### 1 見出し  `.hero > h1`
 - 要素: <h1> 「サービスの名前」
 - 文字サイズ: 32px → 24px(少し小さく)
-- 色: #E4572E → #C94A1D(落ち着かせる)
+- 色: #e4572e → #c94a1d(落ち着かせる)
 ```
 
-## 番号付き画像
-
-ページごとにPNGを1枚生成します(`renderNumberedImage`)。①②③の墨色バッジ、朱色点線の目標箱、
-中心から中心への矢印を元画像解像度で焼き込みます。バッジ径は画像幅の2.5%(最小24px)です。
-HTMLページはcanvasに焼けないため、全ページがHTMLのボードではこのタブ自体が表示されません。
+ラダーの `現在値 → 目標値` は `resolveLadder`(`src/lib/htmlCss.ts`)が、`element.computed` の実測値から
+最も近い段を探し、`delta` を足して解決します。`scale` / `speed` / `intensity` のように実測CSSへの
+対応がないラダー属性は、通常の画像ページと同じ相対ラベル表記(「少し小さく」など)にフォールバックします。

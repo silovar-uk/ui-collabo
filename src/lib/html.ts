@@ -1,10 +1,10 @@
-const REMOVE_TAGS = ['script', 'iframe', 'object', 'embed'];
-
-/** 取り込んだHTMLから script/iframe 等と on* 属性、javascript: URLを除去する。DOMParserはスクリプトを実行しない。 */
-export function sanitizeHtml(raw: string): { html: string; title?: string } {
+/** 貼り付け/ファイル/ブックマークレット経由のHTMLを、表示可能な安全な形にする。 */
+export function sanitizeHtml(raw: string): { html: string; title?: string; origin?: string } {
   const doc = new DOMParser().parseFromString(raw, 'text/html');
-  doc.querySelectorAll(REMOVE_TAGS.join(',')).forEach((el) => el.remove());
 
+  const origin = doc.querySelector('meta[name="uic-origin"]')?.getAttribute('content') ?? undefined;
+
+  doc.querySelectorAll('script, iframe, object, embed').forEach((el) => el.remove());
   doc.querySelectorAll('*').forEach((el) => {
     for (const attr of Array.from(el.attributes)) {
       const name = attr.name.toLowerCase();
@@ -17,5 +17,5 @@ export function sanitizeHtml(raw: string): { html: string; title?: string } {
   });
 
   const title = doc.querySelector('title')?.textContent?.trim() || undefined;
-  return { html: doc.documentElement.outerHTML, title };
+  return { html: doc.documentElement.outerHTML, title, origin };
 }

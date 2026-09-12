@@ -1,30 +1,29 @@
 import { useEffect, useState } from 'preact/hooks';
-import { activePageId, currentBoard, currentBoardId, ready, selectedSpotId, updateBoard } from './state';
+import { activePageId, currentBoard, currentBoardId, ready, selectedSpotId, spaceHeld } from './state';
 import { extractImageFiles } from './lib/image';
 import { handleFiles, handleHtml } from './lib/intake';
 import { Board } from './board/Board';
 import { HtmlBoard } from './board/HtmlBoard';
 import { Empty } from './panels/Empty';
-import { BoardPanel } from './panels/BoardPanel';
-import { SpotPanel } from './panels/SpotPanel';
-import { LivePreview } from './panels/LivePreview';
+import { Sheet } from './panels/Sheet';
+import { LeaderLine } from './panels/LeaderLine';
 import { ExportDrawer } from './panels/ExportDrawer';
 import { RulesDrawer } from './panels/RulesDrawer';
 import { LibraryDrawer } from './panels/LibraryDrawer';
 import { HtmlIntakeDialog } from './panels/HtmlIntakeDialog';
+import { Toast } from './panels/Toast';
 import markSmallUrl from '../brand/mark-small.svg';
-import type { Board as BoardData } from './schema';
 
 type DrawerKind = 'export' | 'rules' | 'library' | null;
 
-function isHtmlFile(f: File): boolean {
-  return f.type === 'text/html' || /\.html?$/i.test(f.name);
+function droppedHtmlFile(dt: DataTransfer): File | null {
+  return Array.from(dt.files ?? []).find((f) => /\.html?$/i.test(f.name)) ?? null;
 }
 
 export function App() {
   const [drawer, setDrawer] = useState<DrawerKind>(null);
   const [dragOver, setDragOver] = useState(false);
-  const [showHtmlDialog, setShowHtmlDialog] = useState(false);
+  const [htmlDialogOpen, setHtmlDialogOpen] = useState(false);
 
   useEffect(() => {
     function onPaste(e: ClipboardEvent) {
@@ -36,11 +35,33 @@ export function App() {
     return () => window.removeEventListener('paste', onPaste);
   }, []);
 
+  // レンズ(H1): スペースを押している間だけ「いま」を覗ける(写真編集ソフトの前後比較と同じ型)
+  useEffect(() => {
+    function isTypingTarget(el: EventTarget | null): boolean {
+      const tag = (el as HTMLElement | null)?.tagName;
+      return tag === 'INPUT' || tag === 'TEXTAREA';
+    }
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.code !== 'Space' || isTypingTarget(e.target)) return;
+      e.preventDefault();
+      spaceHeld.value = true;
+    }
+    function onKeyUp(e: KeyboardEvent) {
+      if (e.code !== 'Space') return;
+      spaceHeld.value = false;
+    }
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+    };
+  }, []);
+
   if (!ready.value) return <div class="loading">読み込み中…</div>;
 
   const board = currentBoard.value;
-  const spot = board?.spots.find((s) => s.id === selectedSpotId.value) ?? null;
-  const activePage = board?.pages.find((p) => p.id === activePageId.value) ?? null;
+  const page = board?.pages.find((p) => p.id === activePageId.value) ?? null;
 
   return (
     <div
@@ -53,13 +74,12 @@ export function App() {
       onDrop={(e) => {
         e.preventDefault();
         setDragOver(false);
-        const dt = e.dataTransfer!;
-        const htmlFile = Array.from(dt.files ?? []).find(isHtmlFile);
+        const htmlFile = droppedHtmlFile(e.dataTransfer!);
         if (htmlFile) {
-          void htmlFile.text().then((html) => handleHtml(html, { useBase: false }));
+          void htmlFile.text().then((raw) => handleHtml(raw, { allowExternal: false }));
           return;
         }
-        void handleFiles(extractImageFiles(dt));
+        void handleFiles(extractImageFiles(e.dataTransfer!));
       }}
     >
       <header class="topbar">
@@ -71,23 +91,21 @@ export function App() {
         <div class="topbar-spacer" />
         {board && (
           <>
-            <button class="btn-sm" onClick={() => setShowHtmlDialog(true)}>HTMLを読み込む</button>
+            <button class="btn-sm" onClick={() => setHtmlDialogOpen(true)}>HTMLを読み込む</button>
             <button class="btn-sm" onClick={() => setDrawer('rules')}>ルール</button>
             <button class="btn-sm" onClick={() => setDrawer('library')}>ライブラリ</button>
-            <button class="btn" onClick={() => setDrawer('export')}>
-              AIに渡す
-              {specifiedSpotCount(board) > 0 && <span class="btn-badge">{specifiedSpotCount(board)}</span>}
-            </button>
+            {/* H5: 主動線は指示書(Sheet)最下部の「AIに渡す」。ここはJSON・画像保存用のドロワーを開くだけ */}
+            <button class="btn-sm" onClick={() => setDrawer('export')}>書き出し</button>
           </>
         )}
       </header>
 
       {!board ? (
-        <Empty dragOver={dragOver} />
+        <Empty dragOver={dragOver} onOpenHtmlIntake={() => setHtmlDialogOpen(true)} />
       ) : (
         <main class="main-layout">
           <div class="board-column">
-            {activePage?.source ? <HtmlBoard key={activePage.id} page={activePage} source={activePage.source} /> : <Board />}
+            {page?.source ? <HtmlBoard key={page.id} board={board} page={page} /> : <Board />}
             {board.pages.length > 1 && (
               <div class="page-strip">
                 {board.pages.map((p, i) => (
@@ -106,45 +124,17 @@ export function App() {
             )}
           </div>
           <aside class="side-panel">
-            <div class="side-panel-top">
-              {board.imageRole === null && board.pages.some((p) => p.image) ? (
-                <ImageRolePrompt />
-              ) : spot ? (
-                <SpotPanel spot={spot} />
-              ) : (
-                <BoardPanel />
-              )}
-            </div>
-            <LivePreview board={board} selectedN={spot?.n ?? null} />
+            <Sheet board={board} />
           </aside>
+          <LeaderLine />
         </main>
       )}
 
       {drawer === 'export' && board && <ExportDrawer board={board} onClose={() => setDrawer(null)} />}
       {drawer === 'rules' && board && <RulesDrawer board={board} onClose={() => setDrawer(null)} />}
       {drawer === 'library' && board && <LibraryDrawer board={board} onClose={() => setDrawer(null)} />}
-      {showHtmlDialog && <HtmlIntakeDialog onClose={() => setShowHtmlDialog(false)} />}
-    </div>
-  );
-}
-
-/** 「AIに渡す」の進捗バッジ用。1つ以上ノートを持つか、残す指定がある箇所の数。 */
-function specifiedSpotCount(board: BoardData): number {
-  return board.spots.filter((s) => s.notes.length > 0 || s.keep).length;
-}
-
-function ImageRolePrompt() {
-  return (
-    <div class="panel-content">
-      <p class="field-label">この画像は?</p>
-      <div class="chip-row">
-        <button class="btn" onClick={() => updateBoard((b) => ({ ...b, imageRole: 'draft' }))}>
-          直したいもの
-        </button>
-        <button class="btn" onClick={() => updateBoard((b) => ({ ...b, imageRole: 'reference' }))}>
-          参考にしたいもの
-        </button>
-      </div>
+      {htmlDialogOpen && <HtmlIntakeDialog onClose={() => setHtmlDialogOpen(false)} />}
+      <Toast />
     </div>
   );
 }

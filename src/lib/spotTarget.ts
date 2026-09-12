@@ -10,7 +10,7 @@ export interface SpotEditTarget {
 
 /** 選択中の箇所について、動かす対象が targetRect(draft画像あり)か rect そのもの(白紙/参考)かを判定する。 */
 export function getSpotEditTarget(board: Board, spot: Spot): SpotEditTarget {
-  // HTMLページの箇所は要素の位置に紐づくため、矩形の移動・リサイズは無効化する
+  // 要素に紐づく箇所(HTMLページ)は矩形の意味を持たないため、動かす操作を無効化する
   if (spot.element) {
     return { rect: spot.rect, dashed: false, apply: () => {} };
   }
