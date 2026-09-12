@@ -197,7 +197,7 @@ export function Board() {
       {board.imageRole === 'draft' && page.image && <LensToggle />}
       {page.image && <ImageRoleToggle role={board.imageRole} />}
       {page.image && paletteHoverColor.value && <PaletteHighlight page={page} cr={cr} hex={paletteHoverColor.value} />}
-      {board.round && <RoundCompare board={board} />}
+      {board.round && <RoundCompare board={board} pageId={page.id} />}
       {isProofed(board) && <ProofStamp />}
 
       {board.spots

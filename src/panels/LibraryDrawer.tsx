@@ -6,31 +6,43 @@ import {
   deleteRuleSet,
   deleteTemplate,
   exportLibraryJson,
-  importLibraryJson,
   library,
   openBoard,
+  replaceLibrary,
   saveAsTemplate,
 } from '../state';
+import { parseLibraryJson } from '../lib/libraryValidation';
 import { Drawer } from './Drawer';
 import type { Board } from '../schema';
+
+function downloadText(text: string, filename: string) {
+  const blob = new Blob([text], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function backupName(): string {
+  return `ui-collabo-library-backup-${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
+}
 
 export function LibraryDrawer({ board, onClose }: { board: Board; onClose: () => void }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const lib = library.value;
 
   function download() {
-    const blob = new Blob([exportLibraryJson()], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'ui-collabo-library.json';
-    a.click();
-    URL.revokeObjectURL(url);
+    downloadText(exportLibraryJson(), 'ui-collabo-library.json');
   }
 
   async function handleImport(file: File) {
     try {
-      importLibraryJson(await file.text());
+      const next = parseLibraryJson(await file.text());
+      if (!confirm('現在のライブラリを読み込んだ内容で置き換えます。現在データは自動でバックアップします。続けますか?')) return;
+      downloadText(exportLibraryJson(), backupName());
+      replaceLibrary(next);
       onClose();
     } catch (err) {
       alert(err instanceof Error ? err.message : '読み込みに失敗しました');
@@ -91,6 +103,7 @@ export function LibraryDrawer({ board, onClose }: { board: Board; onClose: () =>
 
         <div class="field">
           <span class="field-label">書き出し / 読み込み</span>
+          <p class="muted">読み込み前に構造を検証し、置き換え時は現在データを自動バックアップします。</p>
           <div class="chip-row">
             <button class="btn-sm" onClick={download}>書き出す</button>
             <button class="btn-sm" onClick={() => fileRef.current?.click()}>読み込む</button>
@@ -100,7 +113,9 @@ export function LibraryDrawer({ board, onClose }: { board: Board; onClose: () =>
               accept="application/json"
               hidden
               onChange={(e) => {
-                const file = (e.target as HTMLInputElement).files?.[0];
+                const input = e.target as HTMLInputElement;
+                const file = input.files?.[0];
+                input.value = '';
                 if (file) void handleImport(file);
               }}
             />

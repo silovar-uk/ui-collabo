@@ -2,6 +2,7 @@ import { useEffect, useState } from 'preact/hooks';
 import { boardToExportJson, boardToLines, boardToMarkdown, renderNumberedImage, renderProofSheet } from '../export';
 import { Drawer } from './Drawer';
 import type { Board } from '../schema';
+import { copyText } from '../lib/clipboard';
 
 type Tab = 'markdown' | 'json' | 'images';
 
@@ -14,7 +15,7 @@ export function ExportDrawer({ board, onClose }: { board: Board; onClose: () => 
   return (
     <Drawer
       onClose={onClose}
-      ariaLabel="AIに渡す"
+      ariaLabel="書き出し"
       header={
         <>
           <button class={`tab${tab === 'markdown' ? ' is-active' : ''}`} onClick={() => setTab('markdown')}>指示文</button>
@@ -33,18 +34,18 @@ export function ExportDrawer({ board, onClose }: { board: Board; onClose: () => 
 }
 
 function TextTab({ content }: { content: string }) {
-  const [copied, setCopied] = useState(false);
+  const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
   return (
     <div class="drawer-body">
       <button
         class="btn copy-btn"
         onClick={async () => {
-          await navigator.clipboard.writeText(content);
-          setCopied(true);
-          setTimeout(() => setCopied(false), 1500);
+          const copied = await copyText(content);
+          setCopyState(copied ? 'copied' : 'failed');
+          setTimeout(() => setCopyState('idle'), 1800);
         }}
       >
-        {copied ? 'コピーしました' : 'コピー'}
+        {copyState === 'copied' ? 'コピーしました' : copyState === 'failed' ? 'コピーできませんでした' : 'コピー'}
       </button>
       <pre class="export-pre">{content}</pre>
     </div>

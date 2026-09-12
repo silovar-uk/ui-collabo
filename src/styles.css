@@ -1587,3 +1587,12 @@ button {
   padding-left: 18px;
   font-size: var(--fs-sm);
 }
+
+/* 保存状態。通常は控えめ、失敗時だけ強く見せる */
+.save-status {
+  font-size: var(--fs-xs);
+  color: var(--muted-text);
+  white-space: nowrap;
+}
+.save-status.is-saving { opacity: 0.75; }
+.save-status.is-error { color: var(--vermilion); font-weight: 600; }

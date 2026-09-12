@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { boardToMarkdown, boardToExportJson } from '../src/export';
+import { boardToLines, boardToMarkdown, boardToExportJson, proofInstructionLinesBySpot } from '../src/export';
 import { newBoard, type Spot } from '../src/schema';
 
 function makeDraftBoard() {
@@ -159,5 +159,52 @@ describe('boardToExportJson', () => {
     const json = boardToExportJson(makeDraftBoard()) as { pages: { image: unknown }[] };
     expect(JSON.stringify(json)).not.toContain('data:image');
     expect(json.pages[0].image).toEqual({ width: 1600, height: 900 });
+  });
+});
+
+
+describe('Product Contract: geometry instructions', () => {
+  it('横移動だけならX軸の現在値→目標値を出す', () => {
+    const board = makeDraftBoard();
+    board.spots[0].notes = [];
+    board.spots[0].targetRect = { ...board.spots[0].rect, x: 0.13 };
+    const md = boardToMarkdown(board);
+    expect(md).toContain('横位置: 右へ 5%(8% → 13%)');
+    expect(md).not.toContain('縦位置:');
+  });
+
+  it('縦移動だけならY軸の現在値→目標値を出す', () => {
+    const board = makeDraftBoard();
+    board.spots[0].notes = [];
+    board.spots[0].targetRect = { ...board.spots[0].rect, y: 0.08 };
+    const md = boardToMarkdown(board);
+    expect(md).toContain('縦位置: 上へ 4%(12% → 8%)');
+    expect(md).not.toContain('横位置:');
+  });
+
+  it('幅と高さを独立して出す', () => {
+    const board = makeDraftBoard();
+    board.spots[0].notes = [];
+    board.spots[0].targetRect = { ...board.spots[0].rect, w: 0.66, h: 0.15 };
+    const md = boardToMarkdown(board);
+    expect(md).toContain('幅: 60% → 66%');
+    expect(md).toContain('高さ: 10% → 15%');
+  });
+
+  it('位置だけの指示も校正紙用データから欠落しない', () => {
+    const board = makeDraftBoard();
+    board.spots[0].notes = [];
+    board.spots[0].targetRect = { ...board.spots[0].rect, x: 0.13 };
+    const proofLines = proofInstructionLinesBySpot(boardToLines(board));
+    expect(proofLines.get('s1')?.some((line) => line.includes('横位置'))).toBe(true);
+  });
+
+  it('全体トーンがなくても見る順を出力する', () => {
+    const board = makeDraftBoard();
+    board.tone = { chips: [], text: '' };
+    board.order = ['s1', 's2'];
+    const md = boardToMarkdown(board);
+    expect(md).toContain('## 全体');
+    expect(md).toContain('見る順: 1 見出し → 2 ロゴ');
   });
 });

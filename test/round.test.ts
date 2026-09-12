@@ -56,3 +56,57 @@ describe('R2: isProofed', () => {
     expect(isProofed(makeBoard())).toBe(false);
   });
 });
+
+describe('Product Contract: multi-page round', () => {
+  it('複数ページのSpotを対応する新ページへ維持する', () => {
+    const prev = newBoard({ kind: 'slide', aspect: '16:9' });
+    prev.imageRole = 'draft';
+    prev.pages = [
+      { id: 'old1', image: { dataUrl: 'a', width: 100, height: 100 } },
+      { id: 'old2', image: { dataUrl: 'b', width: 100, height: 100 } },
+    ];
+    prev.spots = [
+      { id: 's1', pageId: 'old1', n: 1, label: 'p1', rect: { x: .1, y: .1, w: .2, h: .2 }, keep: false, notes: [{ id: 'n1', kind: 'text', text: 'A', chips: [] }] },
+      { id: 's2', pageId: 'old2', n: 2, label: 'p2', rect: { x: .2, y: .2, w: .2, h: .2 }, keep: false, notes: [{ id: 'n2', kind: 'text', text: 'B', chips: [] }] },
+    ];
+    const next = createRoundBoard(prev, [
+      { id: 'new1', image: { dataUrl: 'c', width: 100, height: 100 } },
+      { id: 'new2', image: { dataUrl: 'd', width: 100, height: 100 } },
+    ]);
+    expect(next.pages.map((p) => p.id)).toEqual(['new1', 'new2']);
+    expect(next.spots.find((s) => s.n === 1)?.pageId).toBe('new1');
+    expect(next.spots.find((s) => s.n === 2)?.pageId).toBe('new2');
+  });
+
+  it('ページ数が違う再校は拒否する', () => {
+    const prev = makeBoard();
+    expect(() => createRoundBoard(prev, [
+      { id: 'a', image: null },
+      { id: 'b', image: null },
+    ])).toThrow('1ページ必要');
+  });
+
+  it('位置だけの未反映指示はtargetRectを失わない', () => {
+    const prev = makeBoard();
+    prev.spots[0].notes = [];
+    prev.spots[0].targetRect = { ...prev.spots[0].rect, x: 0.2 };
+    const next = createRoundBoard(prev, { id: 'p2', image: { dataUrl: 'y', width: 100, height: 100 } });
+    expect(next.spots[0].targetRect?.x).toBe(0.2);
+  });
+
+  it('元からkeepの箇所と○済みの箇所を次の再校でも固定として維持する', () => {
+    const prev = makeBoard();
+    prev.spots.push({ id: 'keep', pageId: 'p1', n: 3, label: 'ロゴ', rect: { x: .7, y: .1, w: .2, h: .1 }, keep: true, notes: [] });
+    prev.spots[0].carried = true;
+    prev.spots[0].check = 'ok';
+    prev.spots[0].keep = true;
+    const next = createRoundBoard(prev, { id: 'p2', image: { dataUrl: 'y', width: 100, height: 100 } });
+    const verified = next.spots.find((s) => s.n === 1)!;
+    const immutable = next.spots.find((s) => s.n === 3)!;
+    expect(verified.keep).toBe(true);
+    expect(verified.check).toBe('ok');
+    expect(verified.notes).toEqual([]);
+    expect(immutable.keep).toBe(true);
+    expect(immutable.carried).toBe(false);
+  });
+});

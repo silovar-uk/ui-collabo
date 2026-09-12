@@ -1,6 +1,7 @@
 import { signal, computed, effect } from '@preact/signals';
 import { kvGet, kvSet } from './lib/storage';
-import { emptyLibrary, newBoard, SCHEMA, type Board, type Format, type LadderAttr, type Library, type RuleSet, type Rules, type Spot } from './schema';
+import { emptyLibrary, newBoard, type Board, type Format, type LadderAttr, type Library, type RuleSet, type Rules, type Spot } from './schema';
+import { parseLibraryJson, repairStoredLibrary, validateLibrary } from './lib/libraryValidation';
 import type { ElementRecord } from './lib/audit';
 
 const LIBRARY_KEY = 'library';
@@ -11,6 +12,7 @@ export const ready = signal(false);
 export const library = signal<Library>(emptyLibrary());
 export const currentBoardId = signal<string | null>(null);
 export const selectedSpotId = signal<string | null>(null);
+export const saveStatus = signal<'idle' | 'saving' | 'saved' | 'error'>('idle');
 
 // ponytail: 直接操作の道具として十分な深さ。無限に持つとメモリを圧迫するため50段で打ち切る
 const UNDO_LIMIT = 50;
@@ -56,20 +58,41 @@ effect(() => {
 });
 
 export async function init(): Promise<void> {
-  const loaded = await kvGet<Library>(LIBRARY_KEY);
-  if (loaded) library.value = loaded;
-  const lastId = await kvGet<string>(LAST_BOARD_KEY);
-  if (lastId && library.value.boards.some((b) => b.id === lastId)) {
-    currentBoardId.value = lastId;
+  try {
+    const loaded = await kvGet<unknown>(LIBRARY_KEY);
+    if (loaded) {
+      try {
+        library.value = validateLibrary(loaded);
+      } catch {
+        // 過去版で起こり得た採番重複など、既知の軽微な不整合だけを補正して再検証する。
+        library.value = validateLibrary(repairStoredLibrary(loaded));
+        showToast('過去の保存データを安全な形式へ補正しました');
+      }
+    }
+    const lastId = await kvGet<string>(LAST_BOARD_KEY);
+    if (lastId && library.value.boards.some((b) => b.id === lastId)) {
+      currentBoardId.value = lastId;
+    }
+    saveStatus.value = 'saved';
+  } catch {
+    saveStatus.value = 'error';
+    showToast('保存領域を読み込めませんでした。変更が保存されない可能性があります');
+  } finally {
+    ready.value = true;
   }
-  ready.value = true;
 }
 
 let saveTimer: ReturnType<typeof setTimeout> | undefined;
 function scheduleSave(): void {
   if (saveTimer) clearTimeout(saveTimer);
+  saveStatus.value = 'saving';
   saveTimer = setTimeout(() => {
-    void kvSet(LIBRARY_KEY, library.value);
+    void kvSet(LIBRARY_KEY, library.value)
+      .then(() => { saveStatus.value = 'saved'; })
+      .catch(() => {
+        saveStatus.value = 'error';
+        showToast('保存に失敗しました。ライブラリを書き出して退避してください');
+      });
   }, SAVE_DEBOUNCE_MS);
 }
 
@@ -294,13 +317,17 @@ export function exportLibraryJson(): string {
   return JSON.stringify(library.value, null, 2);
 }
 
-/** 書き出したJSONを読み込み、ライブラリを置き換える。schemaが一致しない場合は例外を投げる。 */
-export function importLibraryJson(text: string): void {
-  const parsed = JSON.parse(text) as Library;
-  if (parsed.schema !== SCHEMA) {
-    throw new Error(`未対応のファイル形式です(${parsed.schema ?? '不明'})`);
-  }
-  library.value = parsed;
+/** 検証済みライブラリだけを現在データへ反映する。 */
+export function replaceLibrary(next: Library): void {
+  library.value = next;
   currentBoardId.value = null;
+  selectedSpotId.value = null;
+  resetUndoHistory();
   scheduleSave();
+}
+
+/** 書き出したJSONをruntime validationしてから置き換える。失敗時は現在データを変更しない。 */
+export function importLibraryJson(text: string): void {
+  const parsed = parseLibraryJson(text);
+  replaceLibrary(parsed);
 }

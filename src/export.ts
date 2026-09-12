@@ -3,6 +3,9 @@ import { COLOR_DIRECTIONS, COLOR_ROLES, FONT_MOODS, LADDER_TABLE, MOTIONS, relat
 import { ruleRefOptions } from './lib/ruleRefs';
 import { resolveLadder } from './lib/htmlCss';
 import { resolveTargetStep } from './lib/ghost';
+import { geometryChanges, hasSpecifiedContent } from './lib/instructions';
+
+export { hasSpecifiedContent } from './lib/instructions';
 
 const MOTION_TRIGGER_LABEL: Record<'enter' | 'hover' | 'transition', string> = {
   enter: '登場時',
@@ -66,20 +69,30 @@ export interface Line {
 }
 
 function positionLines(spot: Spot): Line[] {
-  if (!spot.targetRect) return [];
+  const changes = geometryChanges(spot);
   const lines: Line[] = [];
-  const { rect, targetRect } = spot;
-  if (rect.x !== targetRect.x || rect.y !== targetRect.y) {
-    const dir: string[] = [];
-    if (targetRect.y < rect.y) dir.push(`上へ ${pct(rect.y - targetRect.y)}`);
-    if (targetRect.y > rect.y) dir.push(`下へ ${pct(targetRect.y - rect.y)}`);
-    if (targetRect.x < rect.x) dir.push(`左へ ${pct(rect.x - targetRect.x)}`);
-    if (targetRect.x > rect.x) dir.push(`右へ ${pct(targetRect.x - rect.x)}`);
-    lines.push({ text: `- 位置: ${dir.join(' / ')}(${formatTargetDelta(rect.y, targetRect.y)})`, spotId: spot.id });
+
+  if (changes.x) {
+    const direction = changes.x.delta < 0 ? '左へ' : '右へ';
+    lines.push({
+      text: `- 横位置: ${direction} ${pct(Math.abs(changes.x.delta))}(${formatTargetDelta(changes.x.from, changes.x.to)})`,
+      spotId: spot.id,
+    });
   }
-  if (rect.w !== targetRect.w || rect.h !== targetRect.h) {
-    const ratio = targetRect.w / rect.w;
-    lines.push({ text: `- 大きさ: 幅 ${formatTargetDelta(rect.w, targetRect.w)}(約${ratio.toFixed(1)}倍)`, spotId: spot.id });
+  if (changes.y) {
+    const direction = changes.y.delta < 0 ? '上へ' : '下へ';
+    lines.push({
+      text: `- 縦位置: ${direction} ${pct(Math.abs(changes.y.delta))}(${formatTargetDelta(changes.y.from, changes.y.to)})`,
+      spotId: spot.id,
+    });
+  }
+  if (changes.width) {
+    const ratio = changes.width.from > 0 ? `、約${(changes.width.to / changes.width.from).toFixed(1)}倍` : '';
+    lines.push({ text: `- 幅: ${formatTargetDelta(changes.width.from, changes.width.to)}${ratio}`, spotId: spot.id });
+  }
+  if (changes.height) {
+    const ratio = changes.height.from > 0 ? `、約${(changes.height.to / changes.height.from).toFixed(1)}倍` : '';
+    lines.push({ text: `- 高さ: ${formatTargetDelta(changes.height.from, changes.height.to)}${ratio}`, spotId: spot.id });
   }
   return lines;
 }
@@ -137,16 +150,6 @@ function formatNote(note: Note, ctx: NoteCtx): string {
       return `- ${def.label}: ${relativeLabel ?? ''}`;
     }
   }
-}
-
-/** S9: ノートなし・位置の差分なしの箇所(囲っただけ)は、指示文に含めない対象かどうか。 */
-export function hasSpecifiedContent(spot: Spot, board: Board): boolean {
-  if (spot.notes.length > 0) return true;
-  if (board.imageRole === 'draft' && spot.targetRect) {
-    const { rect, targetRect } = spot;
-    if (rect.x !== targetRect.x || rect.y !== targetRect.y || rect.w !== targetRect.w || rect.h !== targetRect.h) return true;
-  }
-  return false;
 }
 
 // ponytail: 3x3の粗いゾーン判定。厳密な意味解析はしない
@@ -278,7 +281,7 @@ export function boardToLines(board: Board): Line[] {
     lines.push({ text: '' });
   }
 
-  if (board.tone.chips.length || board.tone.text) {
+  if (board.tone.chips.length || board.tone.text || board.order.length > 1) {
     lines.push({ text: '## 全体' });
     const chips = board.tone.chips.length ? `「${board.tone.chips.join('、')}」` : '';
     const text = board.tone.text ? `「${board.tone.text}」` : '';
@@ -453,6 +456,17 @@ function wrapByChar(ctx: CanvasRenderingContext2D, text: string, maxWidth: numbe
   return lines;
 }
 
+/** Product Contract: 校正紙に載せる箇所別の指示を、描画処理から切り離して抽出する。 */
+export function proofInstructionLinesBySpot(lines: Line[]): Map<string, string[]> {
+  const bySpot = new Map<string, string[]>();
+  for (const line of lines) {
+    if (!line.spotId || !/^\s*-\s+/.test(line.text)) continue;
+    if (!bySpot.has(line.spotId)) bySpot.set(line.spotId, []);
+    bySpot.get(line.spotId)!.push(line.text.replace(/^\s*-\s*/, ''));
+  }
+  return bySpot;
+}
+
 /**
  * R3: 校正紙。元画像の右に和紙色の余白を足し、箇所ごとに赤字の指示を並べて引き出し線で結ぶ。
  * 画像1枚だけをAIに渡しても、箇所と指示が読めるようにする。
@@ -464,15 +478,13 @@ export async function renderProofSheet(page: { image: { dataUrl: string; width: 
   const marginW = Math.max(PROOF_MARGIN_MIN, Math.round(iw * PROOF_MARGIN_RATIO));
   const textMaxWidth = marginW - PROOF_PADDING * 2;
 
-  // 箇所ごとのノート行(先頭の「- 」は取り、見出しは含めない。見出しは箇所のラベルから作る)
-  const noteLinesBySpot = new Map<string, string[]>();
-  for (const line of lines) {
-    if (!line.spotId || !line.noteId) continue;
-    if (!noteLinesBySpot.has(line.spotId)) noteLinesBySpot.set(line.spotId, []);
-    noteLinesBySpot.get(line.spotId)!.push(line.text.replace(/^\s*-\s*/, ''));
-  }
+  // 箇所ごとの「意味のある指示行」を集める。位置・幅・高さはnoteIdを持たないため、
+  // noteIdの有無ではなくspotId + 箇条書き行で拾う(Product Contract)。
+  const instructionLinesBySpot = proofInstructionLinesBySpot(lines);
 
-  const activeSpots = spots.filter((s) => !s.keep && (noteLinesBySpot.get(s.id)?.length ?? 0) > 0).sort((a, b) => a.rect.y - b.rect.y);
+  const activeSpots = spots
+    .filter((s) => !s.keep && (instructionLinesBySpot.get(s.id)?.length ?? 0) > 0)
+    .sort((a, b) => a.rect.y - b.rect.y);
   const keptSpots = spots.filter((s) => s.keep);
 
   const measureCanvas = document.createElement('canvas');
@@ -487,7 +499,7 @@ export async function renderProofSheet(page: { image: { dataUrl: string; width: 
     const heading = `${circledNumber(spot.n)} ${spot.label || `箇所${spot.n}`}`;
     const rows: { text: string; heading: boolean }[] = [];
     for (const t of wrapByChar(mctx, heading, textMaxWidth, PROOF_HEADING_FONT)) rows.push({ text: t, heading: true });
-    for (const raw of noteLinesBySpot.get(spot.id) ?? []) {
+    for (const raw of instructionLinesBySpot.get(spot.id) ?? []) {
       for (const t of wrapByChar(mctx, raw, textMaxWidth, PROOF_BODY_FONT)) rows.push({ text: t, heading: false });
     }
     return { spot, rows, height: rows.length * PROOF_LINE_HEIGHT };

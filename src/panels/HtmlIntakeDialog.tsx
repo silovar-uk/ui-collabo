@@ -1,4 +1,4 @@
-import { useRef, useState } from 'preact/hooks';
+import { useEffect, useRef, useState } from 'preact/hooks';
 import { handleHtml } from '../lib/intake';
 import { BOOKMARKLET_URL } from '../bookmarklet';
 
@@ -7,6 +7,33 @@ export function HtmlIntakeDialog({ onClose }: { onClose: () => void }) {
   const [origin, setOrigin] = useState('');
   const [allowExternal, setAllowExternal] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const modalRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const root = modalRef.current;
+    root?.querySelector<HTMLElement>('button, [href], textarea, input')?.focus();
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        onClose();
+        return;
+      }
+      if (e.key !== 'Tab' || !root) return;
+      const items = Array.from(root.querySelectorAll<HTMLElement>('button:not([disabled]), [href], textarea:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])'));
+      if (items.length === 0) return;
+      const first = items[0];
+      const last = items[items.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    }
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      previous?.focus();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function submitText() {
     if (!text.trim()) return;
@@ -26,7 +53,7 @@ export function HtmlIntakeDialog({ onClose }: { onClose: () => void }) {
 
   return (
     <div class="modal-backdrop" onClick={onClose}>
-      <div class="modal" role="dialog" aria-modal="true" aria-label="HTMLを読み込む" onClick={(e) => e.stopPropagation()}>
+      <div ref={modalRef} class="modal" role="dialog" aria-modal="true" aria-label="HTMLを読み込む" onClick={(e) => e.stopPropagation()}>
         <div class="modal-header">
           <h2>HTMLを読み込む</h2>
           <button class="btn-sm" onClick={onClose}>閉じる</button>

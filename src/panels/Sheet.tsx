@@ -1,11 +1,14 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
-import { boardToLines, boardToMarkdown, hasSpecifiedContent, renderProofSheet, type Line } from '../export';
+import { boardToLines, hasSpecifiedContent, type Line } from '../export';
 import * as notes from '../lib/notes';
 import { extractPalette, type PaletteColor } from '../lib/palette';
 import { createRoundBoard, isProofed } from '../lib/round';
 import { fileToImage } from '../lib/image';
 import { tally, type TallyEntry } from '../lib/audit';
+import { prepareHandoff } from '../lib/handoff';
+import { copyText } from '../lib/clipboard';
 import {
+  activePageId,
   addAndOpenBoard,
   auditHoverSelectors,
   auditRuleCheckRequest,
@@ -36,10 +39,11 @@ const PALETTE_ROLES: { role: 'bg' | 'text' | 'accent' | 'sub'; label: string }[]
 /** R1-b: この画面の色の棚卸し(画像ページのみ)。 */
 function ImagePaletteCard({ board }: { board: Board }) {
   const [colors, setColors] = useState<PaletteColor[] | null>(null);
-  const page = board.pages.find((p) => p.image);
+  const page = board.pages.find((p) => p.id === activePageId.value && p.image) ?? null;
   const dataUrl = page?.image?.dataUrl;
 
   useEffect(() => {
+    setColors(null);
     if (!dataUrl) return;
     let cancelled = false;
     const img = new Image();
@@ -198,22 +202,15 @@ function HtmlAuditCard({ board }: { board: Board }) {
   );
 }
 
-async function copyMarkdown(board: Board): Promise<void> {
-  await navigator.clipboard.writeText(boardToMarkdown(board));
-}
-
-function openChatGpt(board: Board): void {
-  const url = `https://chatgpt.com/?prompt=${encodeURIComponent(boardToMarkdown(board))}`;
-  const opened = window.open(url, '_blank');
-  if (opened) {
-    try {
-      opened.opener = null;
-    } catch {
-      /* noopenerの設定に失敗しても遷移自体は成立している */
-    }
-    return;
-  }
-  window.location.assign(url);
+function openChatGpt(prompt: string): 'url' | 'clipboard' {
+  const encoded = encodeURIComponent(prompt);
+  const promptUrl = `https://chatgpt.com/?prompt=${encoded}`;
+  const canUsePromptUrl = promptUrl.length <= 7000;
+  const url = canUsePromptUrl ? promptUrl : 'https://chatgpt.com/';
+  if (!canUsePromptUrl) void copyText(prompt);
+  const opened = window.open(url, '_blank', 'noopener,noreferrer');
+  if (!opened) window.location.assign(url);
+  return canUsePromptUrl ? 'url' : 'clipboard';
 }
 
 function downloadBlob(blob: Blob, filename: string): void {
@@ -225,92 +222,113 @@ function downloadBlob(blob: Blob, filename: string): void {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-/** R3: H5で渡す画像は校正紙(画像1枚で箇所と指示の両方が読める)を既定にする。 */
-async function numberedImageBlob(board: Board): Promise<Blob | null> {
-  const page = board.pages.find((p) => p.image);
-  if (!page?.image) return null;
-  const pageSpots = board.spots.filter((s) => s.pageId === page.id);
-  const canvas = await renderProofSheet({ image: page.image }, pageSpots, boardToLines(board));
-  return new Promise((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('画像の生成に失敗しました'))), 'image/png'));
-}
-
-type ImageHandoffStatus = 'copied' | 'downloaded' | 'unavailable' | null;
-
-/** H5: 「AIに渡す」を1つの入口にする。画像を準備したあと、ChatGPTを指示文入りで開く。 */
+/** H5/Product Contract: 必要資産を揃えてからChatGPTへ渡す。複数ページをsilentに1枚目へ潰さない。 */
 function ExportButton({ board }: { board: Board }) {
   const [step, setStep] = useState<1 | 2>(1);
   const [exported, setExported] = useState(false);
-  const [imageStatus, setImageStatus] = useState<ImageHandoffStatus>(null);
+  const [handoffMessage, setHandoffMessage] = useState<string | null>(null);
+
   useEffect(() => {
     setStep(1);
     setExported(false);
-    setImageStatus(null);
+    setHandoffMessage(null);
   }, [board.id]);
-  const hasImages = board.pages.some((p) => p.image);
 
-  async function handleClick() {
-    if (!hasImages) {
-      void copyMarkdown(board).catch(() => {});
-      openChatGpt(board);
+  const roundable = board.imageRole === 'draft' && board.pages.length > 0 && board.pages.every((p) => !!p.image);
+
+  async function prepareAssets() {
+    const prepared = await prepareHandoff(board);
+    if (prepared.assets.length === 0) {
+      const copied = await copyText(prepared.prompt);
+      const mode = openChatGpt(prepared.prompt);
+      setHandoffMessage(
+        mode === 'clipboard' && copied
+          ? '指示文が長いためコピーしました。ChatGPTの入力欄へ貼り付けてください。'
+          : null,
+      );
       setExported(true);
       return;
     }
-    if (step === 1) {
-      try {
-        const blob = await numberedImageBlob(board);
-        if (!blob) throw new Error('画像なし');
-        if (!navigator.clipboard?.write || typeof ClipboardItem === 'undefined') throw new Error('画像コピー非対応');
-        await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
-        setImageStatus('copied');
-      } catch {
+
+    const messages: string[] = [];
+    for (const asset of prepared.assets) {
+      if (asset.kind === 'proof-packet') {
+        let copied = false;
         try {
-          const blob = await numberedImageBlob(board);
-          if (!blob) throw new Error('画像なし');
-          downloadBlob(blob, `${board.title || 'board'}.png`);
-          setImageStatus('downloaded');
+          if (!navigator.clipboard?.write || typeof ClipboardItem === 'undefined') throw new Error('画像コピー非対応');
+          await navigator.clipboard.write([new ClipboardItem({ 'image/png': asset.blob })]);
+          copied = true;
         } catch {
-          setImageStatus('unavailable');
+          copied = false;
         }
+        if (copied) messages.push(`校正画像${prepared.imagePageCount > 1 ? `(${prepared.imagePageCount}ページ分)` : ''}をコピーしました`);
+        else {
+          downloadBlob(asset.blob, asset.filename);
+          messages.push(`校正画像を保存しました。ChatGPTで添付してください`);
+        }
+      } else {
+        downloadBlob(asset.blob, asset.filename);
+        messages.push(`HTMLソースを保存しました。ChatGPTで添付してください`);
       }
-      setStep(2);
+    }
+    messages.push(...prepared.warnings);
+    setHandoffMessage(messages.join('。'));
+    setStep(2);
+  }
+
+  async function handleClick() {
+    if (step === 1) {
+      const hasAttachableAssets = board.pages.some((p) => !!p.image || !!p.source);
+      if (!hasAttachableAssets) {
+        const prompt = boardToLines(board).map((line) => line.text).join('\n').trimEnd() + '\n';
+        const mode = openChatGpt(prompt);
+        if (mode === 'clipboard') void copyText(prompt);
+        setExported(true);
+        return;
+      }
+      await prepareAssets();
       return;
     }
-    void copyMarkdown(board).catch(() => {});
-    openChatGpt(board);
+    const prompt = boardToLines(board).map((line) => line.text).join('\n').trimEnd() + '\n';
+    const mode = openChatGpt(prompt);
+    if (mode === 'clipboard') {
+      const copied = await copyText(prompt);
+      setHandoffMessage(copied ? '指示文が長いためコピーしました。ChatGPTで貼り付けてください。' : 'ChatGPTを開きました。指示文は「書き出し」からコピーしてください。');
+    }
     setStep(1);
-    setImageStatus(null);
     setExported(true);
   }
 
-  async function handleRoundFile(e: Event) {
-    const file = (e.target as HTMLInputElement).files?.[0];
-    (e.target as HTMLInputElement).value = '';
-    if (!file) return;
-    const img = await fileToImage(file);
-    const next = createRoundBoard(board, { id: crypto.randomUUID(), image: img });
-    addAndOpenBoard(next);
+  async function handleRoundFiles(e: Event) {
+    const input = e.target as HTMLInputElement;
+    const files = Array.from(input.files ?? []);
+    input.value = '';
+    if (files.length === 0) return;
+    if (files.length !== board.pages.length) {
+      alert(`再校画像は p.1〜p.${board.pages.length} の順に${board.pages.length}枚選んでください(選択: ${files.length}枚)`);
+      return;
+    }
+    try {
+      const pages = [];
+      for (let i = 0; i < files.length; i++) {
+        pages.push({ id: crypto.randomUUID(), label: board.pages[i]?.label, image: await fileToImage(files[i]) });
+      }
+      addAndOpenBoard(createRoundBoard(board, pages));
+    } catch (err) {
+      alert(err instanceof Error ? err.message : '再校画像の読み込みに失敗しました');
+    }
   }
-
-  const handoffMessage =
-    imageStatus === 'copied'
-      ? '画像をコピーしました。次にChatGPTを開き、入力欄へ貼り付けてください。'
-      : imageStatus === 'downloaded'
-        ? '画像コピーが使えなかったためPNGを保存しました。ChatGPTでその画像を添付してください。'
-        : imageStatus === 'unavailable'
-          ? '画像を自動で渡せませんでした。ChatGPTで元画像を添付してください。'
-          : null;
 
   return (
     <div class="sheet-export">
-      {hasImages && step === 2 && handoffMessage && <p class="muted">{handoffMessage}</p>}
+      {handoffMessage && <p class="muted">{handoffMessage}</p>}
       <button class="btn sheet-export-btn" onClick={handleClick}>
-        {hasImages && step === 2 ? '② ChatGPTで開く' : 'AIに渡す'}
+        {step === 2 ? '② ChatGPTで開く' : 'AIに渡す'}
       </button>
-      {/* R2: 渡したあとに、直った版を貼って照合する入口 */}
-      {exported && hasImages && board.imageRole === 'draft' && (
+      {exported && roundable && (
         <label class="btn-sm sheet-round-entry">
-          AIが直したら、直った画像を貼って照合
-          <input type="file" accept="image/*" hidden onChange={handleRoundFile} />
+          {board.pages.length > 1 ? `AIが直した画像をp.1〜p.${board.pages.length}の順に選んで照合` : 'AIが直したら、直った画像を貼って照合'}
+          <input type="file" accept="image/*" multiple={board.pages.length > 1} hidden onChange={handleRoundFiles} />
         </label>
       )}
     </div>

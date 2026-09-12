@@ -119,7 +119,7 @@ export interface Library {
 - 色ノートの役割(`text`/`bg`/`accent`/`line`)とルールのパレット役割(`bg`/`text`/`accent`/`sub`)は語彙が異なります。「ルールにする」で昇格するときは `line → sub` に対応させます([DECISIONS.md](DECISIONS.md)参照)。
 - ラダーの `target.step` は `vocab.ts` の `LADDER_TABLE[attr].steps` への0始まりのインデックスです。`target.delta` は相対チップ(`-2`/`-1`/`1`/`2`)の選択を表します。
 
-## JSON書き出し(「AIに渡す」→ JSON タブ)
+## JSON書き出し(上部「書き出し」→ JSON タブ)
 
 `Board` から `pages[].image.dataUrl` と `pages[].source.html`(数百KBになり得る)を除いたものです
 (`src/export.ts` の `boardToExportJson`)。HTMLページの `title` / `origin` / `allowExternal` / `width` / `height` は残ります。
@@ -220,7 +220,7 @@ export interface Line {
 
 ## 校正紙・番号付き画像
 
-「AIに渡す」1回目のクリップボード画像と、書き出しドロワーの既定は**校正紙**(`renderProofSheet`、
+「AIに渡す」で準備する画像と、書き出しドロワーの既定は**校正紙**(`renderProofSheet`、
 R3)です。元画像の右に和紙色の余白(幅の45%、最小480px)を足し、箇所ごとに①②③の見出しと
 赤字の指示文を並べ、箇所の右辺から引き出し線を引きます。画像1枚だけをAIに渡しても、箇所と
 指示の両方が読めます。末尾に「変えないもの」も書きます。
@@ -257,3 +257,14 @@ R3)です。元画像の右に和紙色の余白(幅の45%、最小480px)を足�
 ラダーの `現在値 → 目標値` は `resolveLadder`(`src/lib/htmlCss.ts`)が、`element.computed` の実測値から
 最も近い段を探し、`delta` を足して解決します。`scale` / `speed` / `intensity` のように実測CSSへの
 対応がないラダー属性は、通常の画像ページと同じ相対ラベル表記(「少し小さく」など)にフォールバックします。
+
+## Product Contract（2026-09-12）
+
+出力経路の回帰を防ぐため、以下を不変条件とします。
+
+- 位置は横(X)・縦(Y)、大きさは幅・高さを独立した変更として扱う。
+- 位置/大きさだけの指示も、Markdownと校正紙の両方へ必ず届く。
+- 複数ページのAI受け渡しでは、画像ページを黙って1ページ目だけに縮退しない。校正紙は全画像ページを1枚のproof packetへまとめる。
+- 再校はページ対応を維持し、「未反映」「修正済み」「変えない」を次の版で混同しない。
+- 外部JSONのライブラリ読み込みはruntime validation後にのみ反映し、置換前に現ライブラリを退避する。
+- GitHub Pagesの公開は `npm test` と `npm run build` の両方が成功した場合だけ行う。

@@ -152,7 +152,7 @@ export function Palette({ board, spot, cr }: { board: Board; spot: Spot; cr: Con
     return num === null ? undefined : nearestStepIndex(attr, num);
   }
 
-  const hasImage = board.pages.some((p) => p.image);
+  const hasImage = !!board.pages.find((p) => p.id === spot.pageId)?.image;
   const colorNotes = spot.notes.filter((n): n is Extract<Note, { kind: 'color' }> => n.kind === 'color');
   const fontNote = spot.notes.find((n): n is Extract<Note, { kind: 'font' }> => n.kind === 'font');
   const motionNote = spot.notes.find((n): n is Extract<Note, { kind: 'motion' }> => n.kind === 'motion');

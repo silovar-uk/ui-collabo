@@ -1,4 +1,4 @@
-import { colorPickRequest, saveRuleSet, updateBoard } from '../state';
+import { activePageId, colorPickRequest, saveRuleSet, updateBoard } from '../state';
 import { Drawer } from './Drawer';
 import { FontPicker } from '../pickers/FontPicker';
 import { MotionPicker } from '../pickers/MotionPicker';
@@ -26,7 +26,7 @@ const MOTION_TRIGGERS: { id: 'enter' | 'hover' | 'transition'; label: string }[]
 ];
 
 export function RulesDrawer({ board, onClose }: { board: Board; onClose: () => void }) {
-  const hasImage = board.pages.some((p) => p.image);
+  const hasImage = !!board.pages.find((p) => p.id === activePageId.value)?.image;
 
   function updateRules(recipe: (r: Rules) => Rules) {
     updateBoard((b) => ({ ...b, rules: recipe(b.rules) }));

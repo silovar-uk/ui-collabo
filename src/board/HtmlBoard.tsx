@@ -32,11 +32,14 @@ export function HtmlBoard({ board, page }: { board: Board; page: Page }) {
   const [frameHtml] = useState(() => buildFrameHtml(source));
   const showingBefore = spaceHeld.value || lens.value === 'before';
   const handlePickRef = useRef<(el: Element) => void>(() => {});
+  const pickerCleanupRef = useRef<(() => void) | null>(null);
 
   useBoardKeys();
 
   useEffect(() => {
     return () => {
+      pickerCleanupRef.current?.();
+      pickerCleanupRef.current = null;
       htmlAuditRecords.value = null;
       auditHoverSelectors.value = null;
     };
@@ -120,7 +123,8 @@ export function HtmlBoard({ board, page }: { board: Board; page: Page }) {
         pages: b.pages.map((p) => (p.id === page.id && p.source ? { ...p, source: { ...p.source, height } } : p)),
       }));
     }
-    attachPicker(doc, (el) => handlePickRef.current(el));
+    pickerCleanupRef.current?.();
+    pickerCleanupRef.current = attachPicker(doc, (el) => handlePickRef.current(el));
     htmlAuditRecords.value = collectElementRecords(doc);
   }
 

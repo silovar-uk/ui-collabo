@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'preact/hooks';
-import { activePageId, currentBoard, currentBoardId, ready, selectedSpotId, spaceHeld } from './state';
+import { activePageId, currentBoard, currentBoardId, ready, saveStatus, selectedSpotId, spaceHeld } from './state';
 import { extractImageFiles } from './lib/image';
 import { handleFiles, handleHtml } from './lib/intake';
 import { Board } from './board/Board';
@@ -88,6 +88,11 @@ export function App() {
           UI ColLabo
         </button>
         {board && <span class="topbar-title">{board.title}</span>}
+        {board && saveStatus.value !== 'idle' && (
+          <span class={`save-status is-${saveStatus.value}`} aria-live="polite">
+            {saveStatus.value === 'saving' ? '保存中…' : saveStatus.value === 'error' ? '保存失敗' : '保存済み'}
+          </span>
+        )}
         <div class="topbar-spacer" />
         {board && (
           <>
