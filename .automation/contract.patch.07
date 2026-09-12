@@ -1,0 +1,216 @@
++    if (raw.image !== null) {
++      if (!isRecord(raw.image) || typeof raw.image.dataUrl !== 'string' || typeof raw.image.width !== 'number' || typeof raw.image.height !== 'number') fail(`${p}.image`, 'が不正です');
++    }
++    if (raw.source !== undefined) {
++      if (!isRecord(raw.source) || raw.source.kind !== 'html' || typeof raw.source.html !== 'string') fail(`${p}.source`, 'が不正です');
++    }
++  });
++
++  const spotIds = new Set<string>();
++  const spotNumbers = new Set<number>();
++  value.spots.forEach((raw, i) => {
++    const p = `${path}.spots[${i}]`;
++    if (!isRecord(raw)) fail(p, 'が不正です');
++    const id = stringAt(raw.id, `${p}.id`);
++    if (spotIds.has(id)) fail(`${p}.id`, 'が重複しています');
++    spotIds.add(id);
++    const pageId = stringAt(raw.pageId, `${p}.pageId`);
++    if (!pageIds.has(pageId)) fail(`${p}.pageId`, 'が存在しないページを参照しています');
++    if (typeof raw.n !== 'number' || raw.n < 1 || !Number.isInteger(raw.n)) fail(`${p}.n`, 'が不正です');
++    if (spotNumbers.has(raw.n)) fail(`${p}.n`, 'が重複しています');
++    spotNumbers.add(raw.n);
++    rectAt(raw.rect, `${p}.rect`);
++    if (raw.targetRect !== undefined) rectAt(raw.targetRect, `${p}.targetRect`);
++    if (typeof raw.keep !== 'boolean' || !Array.isArray(raw.notes)) fail(p, 'のkeep/notesが不正です');
++    raw.notes.forEach((note, n) => noteAt(note, `${p}.notes[${n}]`));
++    if (raw.check !== undefined && !['ok', 'ng'].includes(String(raw.check))) fail(`${p}.check`, 'が不正です');
++  });
++
++  value.order.forEach((id, i) => {
++    if (typeof id !== 'string' || !spotIds.has(id)) fail(`${path}.order[${i}]`, 'が存在しない箇所を参照しています');
++  });
++
++  return value as unknown as Board;
++}
++
++export function validateLibrary(parsed: unknown): Library {
++  if (!isRecord(parsed)) fail('root', 'が不正です');
++  if (parsed.schema !== SCHEMA) fail('schema', `は${SCHEMA}である必要があります`);
++  if (!Array.isArray(parsed.boards) || !Array.isArray(parsed.templates) || !Array.isArray(parsed.ruleSets)) fail('root', 'のboards/templates/ruleSetsが不正です');
++
++  const boardIds = new Set<string>();
++  parsed.boards.forEach((raw, i) => {
++    const board = boardAt(raw, `boards[${i}]`);
++    if (boardIds.has(board.id)) fail(`boards[${i}].id`, 'が重複しています');
++    boardIds.add(board.id);
++  });
++  parsed.templates.forEach((raw, i) => boardAt(raw, `templates[${i}]`));
++  parsed.ruleSets.forEach((raw, i) => {
++    const p = `ruleSets[${i}]`;
++    if (!isRecord(raw)) fail(p, 'が不正です');
++    stringAt(raw.id, `${p}.id`);
++    stringAt(raw.name, `${p}.name`);
++    rulesAt(raw.rules, `${p}.rules`);
++  });
++  return parsed as unknown as Library;
++}
++
++export function parseLibraryJson(text: string): Library {
++  let parsed: unknown;
++  try {
++    parsed = JSON.parse(text);
++  } catch {
++    throw new Error('ライブラリを読み込めません: JSON形式が壊れています');
++  }
++  return validateLibrary(parsed);
++}
++
++
++/**
++ * アプリ自身が過去に保存した同一schemaデータ向けの保守的な補正。
++ * 外部importには使わず、起動時だけ「既知の軽微な不整合」を直してから厳格検証する。
++ * 参照切れや型崩れは推測で直さず、validateLibraryで拒否する。
++ */
++export function repairStoredLibrary(parsed: unknown): unknown {
++  if (!isRecord(parsed) || parsed.schema !== SCHEMA) return parsed;
++  if (!Array.isArray(parsed.boards) || !Array.isArray(parsed.templates) || !Array.isArray(parsed.ruleSets)) return parsed;
++
++  const repairBoard = (raw: unknown): unknown => {
++    if (!isRecord(raw)) return raw;
++    const board = { ...raw } as Record<string, unknown>;
++    if (board.imageRole === undefined) board.imageRole = null;
++    if (!isRecord(board.tone)) board.tone = { chips: [], text: '' };
++    if (isRecord(board.rules)) {
++      board.rules = {
++        ...board.rules,
++        palette: Array.isArray(board.rules.palette) ? board.rules.palette : [],
++        type: Array.isArray(board.rules.type) ? board.rules.type : [],
++        motion: Array.isArray(board.rules.motion) ? board.rules.motion : [],
++        tone: Array.isArray(board.rules.tone) ? board.rules.tone : [],
++      };
++    }
++    if (Array.isArray(board.spots)) {
++      // 過去に一括作成時の採番重複があり得たため、配列順で安全に振り直す。
++      board.spots = board.spots.map((spot, index) => isRecord(spot) ? { ...spot, n: index + 1 } : spot);
++      const ids = new Set(
++        board.spots.filter(isRecord).map((spot) => spot.id).filter((id): id is string => typeof id === 'string'),
++      );
++      if (Array.isArray(board.order)) board.order = board.order.filter((id) => typeof id === 'string' && ids.has(id));
++    }
++    return board;
++  };
++
++  return {
++    ...parsed,
++    boards: parsed.boards.map(repairBoard),
++    templates: parsed.templates.map(repairBoard),
++  };
++}
+diff --git a/test/handoff.test.ts b/test/handoff.test.ts
+new file mode 100644
+index 0000000..aa68dba
+--- /dev/null
++++ b/test/handoff.test.ts
+@@ -0,0 +1,23 @@
++import { describe, expect, it } from 'vitest';
++import { buildHandoffManifest } from '../src/lib/handoff';
++import { newBoard } from '../src/schema';
++
++describe('Handoff Product Contract', () => {
++  it('複数画像ページを1ページ目だけに潰さない', () => {
++    const board = newBoard({ kind: 'slide', aspect: '16:9' });
++    board.imageRole = 'draft';
++    board.pages = [1, 2, 3].map((n) => ({ id: `p${n}`, image: { dataUrl: `img${n}`, width: 1280, height: 720 } }));
++    const manifest = buildHandoffManifest(board);
++    expect(manifest.imagePageIds).toEqual(['p1', 'p2', 'p3']);
++    expect(manifest.htmlPageIds).toEqual([]);
++  });
++
++  it('HTMLページはソース添付対象として識別する', () => {
++    const board = newBoard({ kind: 'web' });
++    board.imageRole = 'draft';
++    board.pages = [{ id: 'html1', image: null, source: { kind: 'html', html: '<html></html>', allowExternal: false, width: 1280, height: 800 } }];
++    const manifest = buildHandoffManifest(board);
++    expect(manifest.htmlPageIds).toEqual(['html1']);
++    expect(manifest.imagePageIds).toEqual([]);
++  });
++});
+diff --git a/test/image.test.ts b/test/image.test.ts
+new file mode 100644
+index 0000000..94c8b02
+--- /dev/null
++++ b/test/image.test.ts
+@@ -0,0 +1,16 @@
++import { describe, expect, it } from 'vitest';
++import { sampleBounds } from '../src/lib/image';
++
++describe('sampleBounds', () => {
++  it('右下端でもcanvas外へ出ない', () => {
++    const b = sampleBounds(100, 80, 99, 79);
++    expect(b.x + b.w).toBeLessThanOrEqual(100);
++    expect(b.y + b.h).toBeLessThanOrEqual(80);
++    expect(b.w).toBeGreaterThan(0);
++    expect(b.h).toBeGreaterThan(0);
++  });
++
++  it('左上端でもcanvas内に収める', () => {
++    expect(sampleBounds(10, 10, 0, 0)).toEqual({ x: 0, y: 0, w: 5, h: 5 });
++  });
++});
+diff --git a/test/libraryValidation.test.ts b/test/libraryValidation.test.ts
+new file mode 100644
+index 0000000..463556d
+--- /dev/null
++++ b/test/libraryValidation.test.ts
+@@ -0,0 +1,51 @@
++import { describe, expect, it } from 'vitest';
++import { emptyLibrary, newBoard } from '../src/schema';
++import { parseLibraryJson, repairStoredLibrary, validateLibrary } from '../src/lib/libraryValidation';
++
++function validJson() {
++  const lib = emptyLibrary();
++  const board = newBoard({ kind: 'web' });
++  board.pages = [{ id: 'p1', image: null }];
++  board.spots = [{ id: 's1', pageId: 'p1', n: 1, label: '見出し', rect: { x: .1, y: .1, w: .3, h: .1 }, keep: false, notes: [] }];
++  board.order = ['s1'];
++  lib.boards = [board];
++  return JSON.stringify(lib);
++}
++
++describe('library runtime validation', () => {
++  it('正常なライブラリを受け付ける', () => {
++    expect(parseLibraryJson(validJson()).boards).toHaveLength(1);
++  });
++
++  it('壊れたJSONを拒否する', () => {
++    expect(() => parseLibraryJson('{oops')).toThrow('JSON形式が壊れています');
++  });
++
++  it('存在しないpageId参照を拒否する', () => {
++    const parsed = JSON.parse(validJson());
++    parsed.boards[0].spots[0].pageId = 'missing';
++    expect(() => parseLibraryJson(JSON.stringify(parsed))).toThrow('存在しないページ');
++  });
++
++  it('重複したSpot番号を拒否する', () => {
++    const parsed = JSON.parse(validJson());
++    parsed.boards[0].spots.push({ ...parsed.boards[0].spots[0], id: 's2' });
++    expect(() => parseLibraryJson(JSON.stringify(parsed))).toThrow('重複しています');
++  });
++});
++
++
++describe('stored library repair', () => {
++  it('過去の重複した箇所番号を配列順で振り直してから検証できる', () => {
++    const lib = emptyLibrary();
++    const board = newBoard({ kind: 'web' });
++    board.pages = [{ id: 'p1', image: null }];
++    board.spots = [
++      { id: 's1', pageId: 'p1', n: 1, label: 'A', rect: { x: 0, y: 0, w: 0.2, h: 0.2 }, keep: false, notes: [] },
++      { id: 's2', pageId: 'p1', n: 1, label: 'B', rect: { x: 0.3, y: 0, w: 0.2, h: 0.2 }, keep: false, notes: [] },
++    ];
++    lib.boards = [board];
++    const repaired = validateLibrary(repairStoredLibrary(lib));
++    expect(repaired.boards[0].spots.map((s) => s.n)).toEqual([1, 2]);
++  });
++});
