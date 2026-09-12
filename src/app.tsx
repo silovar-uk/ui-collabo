@@ -8,6 +8,7 @@ import { Board } from './board/Board';
 import { HtmlBoard } from './board/HtmlBoard';
 import { Empty } from './panels/Empty';
 import { Sheet } from './panels/Sheet';
+import { IntentDock } from './panels/IntentDock';
 import { LeaderLine } from './panels/LeaderLine';
 import { ExportDrawer } from './panels/ExportDrawer';
 import { RulesDrawer } from './panels/RulesDrawer';
@@ -62,7 +63,6 @@ export function App() {
     return () => window.removeEventListener('paste', onPaste);
   }, []);
 
-  // レンズ(H1): スペースを押している間だけ「いま」を覗ける(写真編集ソフトの前後比較と同じ型)
   useEffect(() => {
     function isTypingTarget(el: EventTarget | null): boolean {
       const tag = (el as HTMLElement | null)?.tagName;
@@ -103,6 +103,11 @@ export function App() {
   const pageIndex = board && page ? board.pages.findIndex((p) => p.id === page.id) : -1;
   const specimenKind = page?.source ? 'HTML' : page?.image ? 'IMAGE' : 'BLANK';
   const specimenSize = page?.image ? `${page.image.width}×${page.image.height}` : null;
+  const benchHint = page?.source
+    ? '要素をクリックして気になる箇所を選ぶ'
+    : page?.image
+      ? 'ドラッグして気になる箇所を囲う'
+      : '作業面で気になる箇所を指定する';
 
   return (
     <div
@@ -185,29 +190,31 @@ export function App() {
       {!board ? (
         <Empty dragOver={dragOver} onOpenHtmlIntake={() => setHtmlDialogOpen(true)} />
       ) : (
-        <main class="main-layout lab-workbench">
-          <nav class="specimen-rail" aria-label="ページ一覧">
-            <div class="specimen-rail-head">
-              <span>SPEC</span>
-              <strong>{String(Math.max(pageIndex + 1, 1)).padStart(2, '0')}/{String(board.pages.length).padStart(2, '0')}</strong>
-            </div>
-            <div class="specimen-rail-list">
-              {board.pages.map((p, i) => (
-                <button
-                  key={p.id}
-                  class={`page-thumb specimen-thumb${activePageId.value === p.id ? ' is-active' : ''}`}
-                  onClick={() => {
-                    activePageId.value = p.id;
-                    selectedSpotId.value = null;
-                  }}
-                  aria-label={`標本 ${i + 1}${activePageId.value === p.id ? ' 選択中' : ''}`}
-                >
-                  <span class="specimen-thumb-code">{String(i + 1).padStart(2, '0')}</span>
-                  {p.image ? <img src={p.image.dataUrl} alt="" /> : <span class="specimen-thumb-blank">{p.source ? 'HTML' : 'BLANK'}</span>}
-                </button>
-              ))}
-            </div>
-          </nav>
+        <main class={`main-layout lab-workbench${board.pages.length > 1 ? '' : ' is-single-specimen'}`}>
+          {board.pages.length > 1 && (
+            <nav class="specimen-rail" aria-label="ページ一覧">
+              <div class="specimen-rail-head">
+                <span>SPEC</span>
+                <strong>{String(Math.max(pageIndex + 1, 1)).padStart(2, '0')}/{String(board.pages.length).padStart(2, '0')}</strong>
+              </div>
+              <div class="specimen-rail-list">
+                {board.pages.map((p, i) => (
+                  <button
+                    key={p.id}
+                    class={`page-thumb specimen-thumb${activePageId.value === p.id ? ' is-active' : ''}`}
+                    onClick={() => {
+                      activePageId.value = p.id;
+                      selectedSpotId.value = null;
+                    }}
+                    aria-label={`標本 ${i + 1}${activePageId.value === p.id ? ' 選択中' : ''}`}
+                  >
+                    <span class="specimen-thumb-code">{String(i + 1).padStart(2, '0')}</span>
+                    {p.image ? <img src={p.image.dataUrl} alt="" /> : <span class="specimen-thumb-blank">{p.source ? 'HTML' : 'BLANK'}</span>}
+                  </button>
+                ))}
+              </div>
+            </nav>
+          )}
 
           <section class="board-column lab-bench" aria-label="標本作業台">
             <div class="lab-bench-header">
@@ -220,7 +227,7 @@ export function App() {
                 {specimenSize && <span>SIZE <b>{specimenSize}</b></span>}
                 <span>MARKS <b>{String(activeSpots.length).padStart(2, '0')}</b></span>
               </div>
-              <span class="lab-bench-hint">ドラッグして気になる箇所を囲う</span>
+              <span class="lab-bench-hint">{benchHint}</span>
             </div>
             <div class="lab-bench-surface">
               {page?.source ? <HtmlBoard key={page.id} board={board} page={page} /> : <Board />}
@@ -238,6 +245,7 @@ export function App() {
                 {keptCount > 0 && <span>{keptCount} 固定</span>}
               </div>
             </div>
+            <IntentDock board={board} />
             <Sheet board={board} />
           </aside>
           <LeaderLine />
