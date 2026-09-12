@@ -1,7 +1,7 @@
 (async () => {
   const abs = (u) => { try { return new URL(u, location.href).href; } catch { return u; } };
 
-  // 適用中のCSSをすべて文字列にする。読めないシート(クロスオリジン)は @import で残す
+  /* 適用中のCSSをすべて文字列にする。読めないシート(クロスオリジン)は @import で残す */
   const css = [...document.styleSheets].map((s) => {
     try { return [...s.cssRules].map((r) => r.cssText).join('\n'); }
     catch { return s.href ? `@import url("${s.href}");` : ''; }
@@ -24,15 +24,23 @@
   head.prepend(meta);
 
   const out = '<!doctype html>\n' + root.outerHTML;
+  let copied = false;
   try {
     await navigator.clipboard.writeText(out);
+    copied = true;
   } catch {
     const ta = document.createElement('textarea');
     ta.value = out;
     document.body.appendChild(ta);
     ta.select();
-    document.execCommand('copy');
+    try { copied = document.execCommand('copy'); } catch { copied = false; }
     ta.remove();
   }
-  alert(`UI ColLabo: ${Math.round(out.length / 1024)} KB をコピーしました`);
+  if (copied) {
+    alert(`UI ColLabo: ${Math.round(out.length / 1024)} KB をコピーしました`);
+  } else {
+    /* 両方の方法が失敗した場合(Permissions-Policyでクリップボード禁止など)は
+       「コピーできた」と偽らずpromptの選択済みテキストを手動コピーしてもらう */
+    prompt('自動コピーに失敗しました。この内容を選択(Ctrl+A)してコピー(Ctrl+C)してください:', out);
+  }
 })();
