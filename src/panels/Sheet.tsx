@@ -202,6 +202,20 @@ async function copyMarkdown(board: Board): Promise<void> {
   await navigator.clipboard.writeText(boardToMarkdown(board));
 }
 
+function openChatGpt(board: Board): void {
+  const url = `https://chatgpt.com/?prompt=${encodeURIComponent(boardToMarkdown(board))}`;
+  const opened = window.open(url, '_blank');
+  if (opened) {
+    try {
+      opened.opener = null;
+    } catch {
+      /* noopenerの設定に失敗しても遷移自体は成立している */
+    }
+    return;
+  }
+  window.location.assign(url);
+}
+
 function downloadBlob(blob: Blob, filename: string): void {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -220,19 +234,24 @@ async function numberedImageBlob(board: Board): Promise<Blob | null> {
   return new Promise((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('画像の生成に失敗しました'))), 'image/png'));
 }
 
-/** H5: 「AIに渡す」を1つのボタンで。画像があれば1回目で画像、2回目で指示文をコピーする。 */
+type ImageHandoffStatus = 'copied' | 'downloaded' | 'unavailable' | null;
+
+/** H5: 「AIに渡す」を1つの入口にする。画像を準備したあと、ChatGPTを指示文入りで開く。 */
 function ExportButton({ board }: { board: Board }) {
   const [step, setStep] = useState<1 | 2>(1);
   const [exported, setExported] = useState(false);
+  const [imageStatus, setImageStatus] = useState<ImageHandoffStatus>(null);
   useEffect(() => {
     setStep(1);
     setExported(false);
+    setImageStatus(null);
   }, [board.id]);
   const hasImages = board.pages.some((p) => p.image);
 
   async function handleClick() {
     if (!hasImages) {
-      await copyMarkdown(board).catch(() => {});
+      void copyMarkdown(board).catch(() => {});
+      openChatGpt(board);
       setExported(true);
       return;
     }
@@ -240,23 +259,26 @@ function ExportButton({ board }: { board: Board }) {
       try {
         const blob = await numberedImageBlob(board);
         if (!blob) throw new Error('画像なし');
+        if (!navigator.clipboard?.write || typeof ClipboardItem === 'undefined') throw new Error('画像コピー非対応');
         await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
-        setStep(2);
+        setImageStatus('copied');
       } catch {
-        // 画像のコピーに失敗したら、PNGを保存して指示文をコピーする
         try {
           const blob = await numberedImageBlob(board);
-          if (blob) downloadBlob(blob, `${board.title || 'board'}.png`);
+          if (!blob) throw new Error('画像なし');
+          downloadBlob(blob, `${board.title || 'board'}.png`);
+          setImageStatus('downloaded');
         } catch {
-          /* 画像自体が作れない場合は諦めて指示文だけ渡す */
+          setImageStatus('unavailable');
         }
-        await copyMarkdown(board).catch(() => {});
-        setExported(true);
       }
+      setStep(2);
       return;
     }
-    await copyMarkdown(board).catch(() => {});
+    void copyMarkdown(board).catch(() => {});
+    openChatGpt(board);
     setStep(1);
+    setImageStatus(null);
     setExported(true);
   }
 
@@ -269,11 +291,20 @@ function ExportButton({ board }: { board: Board }) {
     addAndOpenBoard(next);
   }
 
+  const handoffMessage =
+    imageStatus === 'copied'
+      ? '画像をコピーしました。次にChatGPTを開き、入力欄へ貼り付けてください。'
+      : imageStatus === 'downloaded'
+        ? '画像コピーが使えなかったためPNGを保存しました。ChatGPTでその画像を添付してください。'
+        : imageStatus === 'unavailable'
+          ? '画像を自動で渡せませんでした。ChatGPTで元画像を添付してください。'
+          : null;
+
   return (
     <div class="sheet-export">
-      {hasImages && step === 2 && <p class="muted">AIの入力欄に画像を貼ったら、もう一度押してください</p>}
+      {hasImages && step === 2 && handoffMessage && <p class="muted">{handoffMessage}</p>}
       <button class="btn sheet-export-btn" onClick={handleClick}>
-        {hasImages && step === 2 ? '② 指示文をコピー' : 'AIに渡す'}
+        {hasImages && step === 2 ? '② ChatGPTで開く' : 'AIに渡す'}
       </button>
       {/* R2: 渡したあとに、直った版を貼って照合する入口 */}
       {exported && hasImages && board.imageRole === 'draft' && (
