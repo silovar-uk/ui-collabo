@@ -7,6 +7,7 @@ import { fileToImage } from '../lib/image';
 import { tally, type TallyEntry } from '../lib/audit';
 import { prepareHandoff } from '../lib/handoff';
 import { copyText } from '../lib/clipboard';
+import { protocolGroupCount, protocolPageGroups } from '../lib/protocolPages';
 import {
   activePageId,
   addAndOpenBoard,
@@ -23,7 +24,7 @@ import {
   type PaletteCategory,
 } from '../state';
 import { TONE_CHIPS } from '../vocab';
-import type { Board, Note, Spot } from '../schema';
+import type { Board, Note, Page, Spot } from '../schema';
 
 function categoryForNote(note: Note): PaletteCategory {
   return note.kind === 'ladder' ? 'ladder' : note.kind;
@@ -426,8 +427,13 @@ interface SpotCardProps {
 }
 
 function SpotCard({ spot, lines, selected, flashKeys }: SpotCardProps) {
-  function open(category: PaletteCategory) {
+  function selectSpot() {
+    if (activePageId.value !== spot.pageId) activePageId.value = spot.pageId;
     selectedSpotId.value = spot.id;
+  }
+
+  function open(category: PaletteCategory) {
+    selectSpot();
     requestOpenCategory.value = { spotId: spot.id, category };
   }
 
@@ -478,8 +484,8 @@ function SpotCard({ spot, lines, selected, flashKeys }: SpotCardProps) {
               if (hoverLine.value?.lineKey === key) hoverLine.value = null;
             }}
             onClick={() => {
-              selectedSpotId.value = spot.id;
               if (clickCategory) open(clickCategory);
+              else selectSpot();
             }}
           >
             <span class="sheet-line-text">{line.text}</span>
@@ -504,16 +510,90 @@ function SpotCard({ spot, lines, selected, flashKeys }: SpotCardProps) {
 }
 
 function EmptySpotCard({ spot, selected }: { spot: Spot; selected: boolean }) {
+  function selectSpot() {
+    if (activePageId.value !== spot.pageId) activePageId.value = spot.pageId;
+    selectedSpotId.value = spot.id;
+  }
+
   return (
     <div
       class={`sheet-card sheet-card-empty${selected ? ' is-selected' : ''}`}
       onMouseEnter={() => (hoverSpotId.value = spot.id)}
       onMouseLeave={() => { if (hoverSpotId.value === spot.id) hoverSpotId.value = null; }}
-      onClick={() => (selectedSpotId.value = spot.id)}
+      onClick={selectSpot}
     >
       <div class="sheet-line">{spot.n} {spot.label || `箇所${spot.n}`}</div>
       <p class="muted">まだ「こうしたい」がありません(このままでは渡されません)</p>
     </div>
+  );
+}
+
+function pageDisplayLabel(page: Page): string {
+  if (page.label) return page.label;
+  if (page.source?.title) return page.source.title;
+  if (page.source) return 'HTML';
+  if (page.image) return '画像';
+  return '白紙';
+}
+
+interface PageGroupProps {
+  board: Board;
+  page: Page;
+  pageIndex: number;
+  spotIds: string[];
+  emptySpots: Spot[];
+  active: boolean;
+  bySpot: Map<string, Line[]>;
+  flashKeys: Set<string>;
+}
+
+function ProtocolPageGroup({ board, page, pageIndex, spotIds, emptySpots, active, bySpot, flashKeys }: PageGroupProps) {
+  const count = spotIds.length + emptySpots.length;
+  const contents = (
+    <>
+      {spotIds.map((spotId) => {
+        const spot = board.spots.find((candidate) => candidate.id === spotId);
+        if (!spot) return null;
+        return <SpotCard key={spotId} spot={spot} lines={bySpot.get(spotId) ?? []} selected={selectedSpotId.value === spotId} flashKeys={flashKeys} />;
+      })}
+      {emptySpots.map((spot) => (
+        <EmptySpotCard key={spot.id} spot={spot} selected={selectedSpotId.value === spot.id} />
+      ))}
+      {active && count === 0 && <p class="muted protocol-page-empty">このページにはまだ指示がありません。対象を選び、「こうしたい」を指定してください。</p>}
+    </>
+  );
+
+  if (board.pages.length <= 1) return <section class="protocol-page-group is-active">{contents}</section>;
+
+  const heading = (
+    <span class="protocol-page-heading">
+      <span class="protocol-page-code">p.{pageIndex + 1}</span>
+      <strong>{pageDisplayLabel(page)}</strong>
+      <span class="protocol-page-count">{count}件</span>
+    </span>
+  );
+
+  if (active) {
+    return (
+      <section class="protocol-page-group is-active" aria-label={`現在のページ p.${pageIndex + 1}`}>
+        <div class="protocol-page-head">{heading}</div>
+        {contents}
+      </section>
+    );
+  }
+
+  return (
+    <details
+      class="protocol-page-group is-other"
+      onToggle={(e) => {
+        if (!(e.currentTarget as HTMLDetailsElement).open) return;
+        activePageId.value = page.id;
+        selectedSpotId.value = null;
+      }}
+    >
+      <summary>{heading}</summary>
+      {contents}
+    </details>
   );
 }
 
@@ -564,22 +644,28 @@ export function Sheet({ board }: { board: Board }) {
   const emptySpots = isBrief
     ? []
     : board.spots.filter((s) => !s.keep && !hasSpecifiedContent(s, board));
+  const pageGroups = protocolPageGroups(board, activePageId.value, order, emptySpots);
 
   return (
     <div class="sheet">
       {isProofed(board) && <div class="sheet-proofed">校了。直すところはありません</div>}
+      {pageGroups.map((group) => (
+        <ProtocolPageGroup
+          key={group.page.id}
+          board={board}
+          page={group.page}
+          pageIndex={group.pageIndex}
+          spotIds={group.spotIds}
+          emptySpots={group.emptySpots}
+          active={group.active}
+          bySpot={bySpot}
+          flashKeys={flashKeys}
+        />
+      ))}
+      {pageGroups.length === 0 && <p class="muted sheet-empty">対象を追加して、気になる箇所を指定してください。</p>}
       <BoardCard board={board} />
       <ImagePaletteCard board={board} />
       <HtmlAuditCard board={board} />
-      {order.map((spotId) => {
-        const spot = board.spots.find((s) => s.id === spotId);
-        if (!spot) return null;
-        return <SpotCard key={spotId} spot={spot} lines={bySpot.get(spotId)!} selected={selectedSpotId.value === spotId} flashKeys={flashKeys} />;
-      })}
-      {emptySpots.map((spot) => (
-        <EmptySpotCard key={spot.id} spot={spot} selected={selectedSpotId.value === spot.id} />
-      ))}
-      {order.length === 0 && emptySpots.length === 0 && <p class="muted sheet-empty">画像の上をドラッグして、気になる箇所を囲んでください。</p>}
       <ExportButton board={board} />
     </div>
   );
