@@ -1,0 +1,317 @@
+/*
+ * Focus layer: 実利用監査で見つかった認知負荷だけを削る。
+ * lab.css の世界観は残し、主作業・Intent・レスポンシブを優先する。
+ */
+
+.main-layout.lab-workbench.is-single-specimen {
+  grid-template-columns: minmax(0, 1fr) minmax(360px, 430px);
+}
+
+.intent-dock {
+  flex: 0 0 auto;
+  padding: 11px 12px 10px;
+  background: #f4f7f3;
+  border-bottom: 1px solid var(--lab-line-strong);
+}
+
+.intent-dock-head {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.intent-dock-head > div {
+  min-width: 0;
+}
+
+.intent-dock-head strong {
+  display: block;
+  margin-top: 2px;
+  font-size: 15px;
+  line-height: 1.2;
+}
+
+.intent-target {
+  max-width: 52%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--lab-subtle);
+  font-size: 9px;
+}
+
+.intent-input {
+  width: 100%;
+  min-height: 36px;
+  padding: 8px 10px;
+  font-size: 13px;
+  border-color: var(--lab-line-strong);
+}
+
+.intent-input:focus {
+  border-color: var(--lab-signal);
+  box-shadow: 0 0 0 1px var(--lab-signal);
+}
+
+.intent-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 7px;
+}
+
+.intent-chip {
+  min-height: 28px;
+  padding: 5px 8px;
+  color: var(--lab-ink);
+  background: #fff;
+  border: 1px solid #cbd3cd;
+  border-radius: 2px;
+  font: inherit;
+  font-size: 10px;
+  line-height: 1.25;
+  text-align: left;
+}
+
+.intent-chip:hover,
+.intent-chip:focus-visible {
+  background: #edf4ef;
+  border-color: var(--lab-signal);
+}
+
+.intent-empty {
+  padding: 4px 0;
+  font-size: 10px;
+}
+
+.intent-foot {
+  margin: 7px 0 0;
+  color: var(--lab-faint);
+  font-size: 9px;
+  line-height: 1.4;
+}
+
+/*
+ * 指示を最初に読む。既存DOMは壊さず、全体設定・診断は視覚上後段へ送る。
+ * 次フェーズではSheet自体をsemanticに分割するが、このスプリントではデータモデルを触らない。
+ */
+.lab-protocol-panel .sheet > .sheet-card-board {
+  order: 20;
+  margin-top: 4px;
+}
+
+.lab-protocol-panel .sheet > .sheet-card:has(.palette-swatch-row),
+.lab-protocol-panel .sheet > .sheet-card:has(.audit-row) {
+  order: 30;
+}
+
+.lab-protocol-panel .sheet > .sheet-export {
+  order: 40;
+}
+
+.lab-protocol-panel .sheet > .sheet-card-board::before {
+  content: '全体設定';
+  display: block;
+  margin-bottom: 7px;
+  color: var(--lab-subtle);
+  font: 700 9px/1.2 'JetBrains Mono', ui-monospace, monospace;
+  letter-spacing: .035em;
+}
+
+.lab-protocol-panel .sheet > .sheet-card:has(.palette-swatch-row),
+.lab-protocol-panel .sheet > .sheet-card:has(.audit-row) {
+  background: #f7f8f5;
+  opacity: .82;
+}
+
+@media (max-width: 920px) {
+  html,
+  body,
+  #app,
+  .app-shell {
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
+  .lab-topbar {
+    min-height: auto;
+    flex-wrap: wrap;
+    gap: 7px 10px;
+    padding: 7px 8px;
+  }
+
+  .lab-wordmark {
+    min-width: 0;
+  }
+
+  .lab-wordmark-copy small,
+  .lab-board-identity,
+  .lab-top-actions .lab-action span,
+  .lab-sequence-meta,
+  .lab-sequence-readout {
+    display: none;
+  }
+
+  .lab-save-status {
+    margin-left: auto;
+  }
+
+  .lab-top-actions {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 4px;
+  }
+
+  .lab-action.btn-sm {
+    min-width: 0;
+    align-items: center;
+    padding: 6px 4px;
+    text-align: center;
+  }
+
+  .lab-sequence {
+    height: 42px;
+    flex: 0 0 42px;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .lab-phase-list {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    min-width: 0;
+  }
+
+  .lab-phase-list li {
+    min-width: 0;
+    grid-template-columns: 18px minmax(0, 1fr);
+    grid-template-rows: 1fr;
+    gap: 3px;
+    padding: 2px 4px;
+  }
+
+  .lab-phase-code {
+    grid-row: 1;
+    width: 16px;
+    height: 16px;
+    font-size: 6px;
+  }
+
+  .lab-phase-en {
+    display: none;
+  }
+
+  .lab-phase-ja {
+    align-self: center;
+    overflow: hidden;
+    font-size: 9px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .main-layout.lab-workbench,
+  .main-layout.lab-workbench.is-single-specimen {
+    display: block;
+    min-width: 0;
+    overflow: visible;
+  }
+
+  .specimen-rail {
+    display: none;
+  }
+
+  .board-column.lab-bench {
+    min-width: 0;
+    overflow: visible;
+  }
+
+  .lab-bench-header {
+    height: 48px;
+    position: relative;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 7px;
+    padding: 0 10px;
+  }
+
+  .lab-bench-hint {
+    display: none;
+  }
+
+  .lab-bench-readouts {
+    min-width: 0;
+    gap: 5px;
+  }
+
+  .lab-bench-readouts span:nth-child(2) {
+    display: none;
+  }
+
+  .lab-bench-surface {
+    min-height: 0;
+    padding: 18px 10px 30px;
+  }
+
+  .lab-bench-surface::before {
+    display: none;
+  }
+
+  .side-panel.lab-protocol-panel {
+    min-width: 0;
+    min-height: auto;
+    overflow: visible;
+    border-top: 1px solid var(--lab-line-strong);
+    border-left: 0;
+  }
+
+  .lab-panel-header {
+    height: 48px;
+    position: relative;
+    padding: 0 10px;
+  }
+
+  .lab-protocol-panel .sheet,
+  .intent-dock {
+    min-width: 0;
+  }
+
+  .palette-pop {
+    max-width: calc(100vw - 12px);
+  }
+}
+
+@media (max-width: 520px) {
+  .lab-top-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .lab-wordmark-plate {
+    width: 30px;
+    height: 30px;
+  }
+
+  .lab-wordmark-copy strong {
+    font-size: 13px;
+  }
+
+  .lab-phase-list li {
+    padding-inline: 3px;
+  }
+
+  .lab-phase-ja {
+    font-size: 8px;
+  }
+
+  .lab-bench-readouts span:first-child {
+    display: none;
+  }
+
+  .intent-suggestions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .intent-chip {
+    width: 100%;
+  }
+}
