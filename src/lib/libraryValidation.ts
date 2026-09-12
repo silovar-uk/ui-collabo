@@ -138,7 +138,6 @@ export function parseLibraryJson(text: string): Library {
   return validateLibrary(parsed);
 }
 
-
 /**
  * アプリ自身が過去に保存した同一schemaデータ向けの保守的な補正。
  * 外部importには使わず、起動時だけ「既知の軽微な不整合」を直してから厳格検証する。
@@ -162,11 +161,13 @@ export function repairStoredLibrary(parsed: unknown): unknown {
         tone: Array.isArray(board.rules.tone) ? board.rules.tone : [],
       };
     }
-    if (Array.isArray(board.spots)) {
+    const spots = board.spots;
+    if (Array.isArray(spots)) {
       // 過去に一括作成時の採番重複があり得たため、配列順で安全に振り直す。
-      board.spots = board.spots.map((spot, index) => isRecord(spot) ? { ...spot, n: index + 1 } : spot);
+      const repairedSpots = spots.map((spot: unknown, index: number) => isRecord(spot) ? { ...spot, n: index + 1 } : spot);
+      board.spots = repairedSpots;
       const ids = new Set(
-        board.spots.filter(isRecord).map((spot) => spot.id).filter((id): id is string => typeof id === 'string'),
+        repairedSpots.filter(isRecord).map((spot) => spot.id).filter((id): id is string => typeof id === 'string'),
       );
       if (Array.isArray(board.order)) board.order = board.order.filter((id) => typeof id === 'string' && ids.has(id));
     }
