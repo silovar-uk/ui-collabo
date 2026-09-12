@@ -1,0 +1,1 @@
++function bitmapToImage(bitmap: ImageBitmap, sourceType: string): LoadedImage {
