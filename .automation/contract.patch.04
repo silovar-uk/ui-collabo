@@ -1,0 +1,279 @@
++  async function prepareAssets() {
++    const prepared = await prepareHandoff(board);
++    if (prepared.assets.length === 0) {
++      const copied = await copyText(prepared.prompt);
++      const mode = openChatGpt(prepared.prompt);
++      setHandoffMessage(
++        mode === 'clipboard' && copied
++          ? '指示文が長いためコピーしました。ChatGPTの入力欄へ貼り付けてください。'
++          : null,
++      );
+       setExported(true);
+       return;
+     }
+-    if (step === 1) {
+-      try {
+-        const blob = await numberedImageBlob(board);
+-        if (!blob) throw new Error('画像なし');
+-        if (!navigator.clipboard?.write || typeof ClipboardItem === 'undefined') throw new Error('画像コピー非対応');
+-        await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+-        setImageStatus('copied');
+-      } catch {
++
++    const messages: string[] = [];
++    for (const asset of prepared.assets) {
++      if (asset.kind === 'proof-packet') {
++        let copied = false;
+         try {
+-          const blob = await numberedImageBlob(board);
+-          if (!blob) throw new Error('画像なし');
+-          downloadBlob(blob, `${board.title || 'board'}.png`);
+-          setImageStatus('downloaded');
++          if (!navigator.clipboard?.write || typeof ClipboardItem === 'undefined') throw new Error('画像コピー非対応');
++          await navigator.clipboard.write([new ClipboardItem({ 'image/png': asset.blob })]);
++          copied = true;
+         } catch {
+-          setImageStatus('unavailable');
++          copied = false;
++        }
++        if (copied) messages.push(`校正画像${prepared.imagePageCount > 1 ? `(${prepared.imagePageCount}ページ分)` : ''}をコピーしました`);
++        else {
++          downloadBlob(asset.blob, asset.filename);
++          messages.push(`校正画像を保存しました。ChatGPTで添付してください`);
+         }
++      } else {
++        downloadBlob(asset.blob, asset.filename);
++        messages.push(`HTMLソースを保存しました。ChatGPTで添付してください`);
+       }
+-      setStep(2);
++    }
++    messages.push(...prepared.warnings);
++    setHandoffMessage(messages.join('。'));
++    setStep(2);
++  }
++
++  async function handleClick() {
++    if (step === 1) {
++      const hasAttachableAssets = board.pages.some((p) => !!p.image || !!p.source);
++      if (!hasAttachableAssets) {
++        const prompt = boardToLines(board).map((line) => line.text).join('\n').trimEnd() + '\n';
++        const mode = openChatGpt(prompt);
++        if (mode === 'clipboard') void copyText(prompt);
++        setExported(true);
++        return;
++      }
++      await prepareAssets();
+       return;
+     }
+-    void copyMarkdown(board).catch(() => {});
+-    openChatGpt(board);
++    const prompt = boardToLines(board).map((line) => line.text).join('\n').trimEnd() + '\n';
++    const mode = openChatGpt(prompt);
++    if (mode === 'clipboard') {
++      const copied = await copyText(prompt);
++      setHandoffMessage(copied ? '指示文が長いためコピーしました。ChatGPTで貼り付けてください。' : 'ChatGPTを開きました。指示文は「書き出し」からコピーしてください。');
++    }
+     setStep(1);
+-    setImageStatus(null);
+     setExported(true);
+   }
+ 
+-  async function handleRoundFile(e: Event) {
+-    const file = (e.target as HTMLInputElement).files?.[0];
+-    (e.target as HTMLInputElement).value = '';
+-    if (!file) return;
+-    const img = await fileToImage(file);
+-    const next = createRoundBoard(board, { id: crypto.randomUUID(), image: img });
+-    addAndOpenBoard(next);
++  async function handleRoundFiles(e: Event) {
++    const input = e.target as HTMLInputElement;
++    const files = Array.from(input.files ?? []);
++    input.value = '';
++    if (files.length === 0) return;
++    if (files.length !== board.pages.length) {
++      alert(`再校画像は p.1〜p.${board.pages.length} の順に${board.pages.length}枚選んでください(選択: ${files.length}枚)`);
++      return;
++    }
++    try {
++      const pages = [];
++      for (let i = 0; i < files.length; i++) {
++        pages.push({ id: crypto.randomUUID(), label: board.pages[i]?.label, image: await fileToImage(files[i]) });
++      }
++      addAndOpenBoard(createRoundBoard(board, pages));
++    } catch (err) {
++      alert(err instanceof Error ? err.message : '再校画像の読み込みに失敗しました');
++    }
+   }
+ 
+-  const handoffMessage =
+-    imageStatus === 'copied'
+-      ? '画像をコピーしました。次にChatGPTを開き、入力欄へ貼り付けてください。'
+-      : imageStatus === 'downloaded'
+-        ? '画像コピーが使えなかったためPNGを保存しました。ChatGPTでその画像を添付してください。'
+-        : imageStatus === 'unavailable'
+-          ? '画像を自動で渡せませんでした。ChatGPTで元画像を添付してください。'
+-          : null;
+-
+   return (
+     <div class="sheet-export">
+-      {hasImages && step === 2 && handoffMessage && <p class="muted">{handoffMessage}</p>}
++      {handoffMessage && <p class="muted">{handoffMessage}</p>}
+       <button class="btn sheet-export-btn" onClick={handleClick}>
+-        {hasImages && step === 2 ? '② ChatGPTで開く' : 'AIに渡す'}
++        {step === 2 ? '② ChatGPTで開く' : 'AIに渡す'}
+       </button>
+-      {/* R2: 渡したあとに、直った版を貼って照合する入口 */}
+-      {exported && hasImages && board.imageRole === 'draft' && (
++      {exported && roundable && (
+         <label class="btn-sm sheet-round-entry">
+-          AIが直したら、直った画像を貼って照合
+-          <input type="file" accept="image/*" hidden onChange={handleRoundFile} />
++          {board.pages.length > 1 ? `AIが直した画像をp.1〜p.${board.pages.length}の順に選んで照合` : 'AIが直したら、直った画像を貼って照合'}
++          <input type="file" accept="image/*" multiple={board.pages.length > 1} hidden onChange={handleRoundFiles} />
+         </label>
+       )}
+     </div>
+diff --git a/src/state.ts b/src/state.ts
+index c02bedc..51bf5e7 100644
+--- a/src/state.ts
++++ b/src/state.ts
+@@ -1,6 +1,7 @@
+ import { signal, computed, effect } from '@preact/signals';
+ import { kvGet, kvSet } from './lib/storage';
+-import { emptyLibrary, newBoard, SCHEMA, type Board, type Format, type LadderAttr, type Library, type RuleSet, type Rules, type Spot } from './schema';
++import { emptyLibrary, newBoard, type Board, type Format, type LadderAttr, type Library, type RuleSet, type Rules, type Spot } from './schema';
++import { parseLibraryJson, repairStoredLibrary, validateLibrary } from './lib/libraryValidation';
+ import type { ElementRecord } from './lib/audit';
+ 
+ const LIBRARY_KEY = 'library';
+@@ -11,6 +12,7 @@ export const ready = signal(false);
+ export const library = signal<Library>(emptyLibrary());
+ export const currentBoardId = signal<string | null>(null);
+ export const selectedSpotId = signal<string | null>(null);
++export const saveStatus = signal<'idle' | 'saving' | 'saved' | 'error'>('idle');
+ 
+ // ponytail: 直接操作の道具として十分な深さ。無限に持つとメモリを圧迫するため50段で打ち切る
+ const UNDO_LIMIT = 50;
+@@ -56,20 +58,41 @@ effect(() => {
+ });
+ 
+ export async function init(): Promise<void> {
+-  const loaded = await kvGet<Library>(LIBRARY_KEY);
+-  if (loaded) library.value = loaded;
+-  const lastId = await kvGet<string>(LAST_BOARD_KEY);
+-  if (lastId && library.value.boards.some((b) => b.id === lastId)) {
+-    currentBoardId.value = lastId;
++  try {
++    const loaded = await kvGet<unknown>(LIBRARY_KEY);
++    if (loaded) {
++      try {
++        library.value = validateLibrary(loaded);
++      } catch {
++        // 過去版で起こり得た採番重複など、既知の軽微な不整合だけを補正して再検証する。
++        library.value = validateLibrary(repairStoredLibrary(loaded));
++        showToast('過去の保存データを安全な形式へ補正しました');
++      }
++    }
++    const lastId = await kvGet<string>(LAST_BOARD_KEY);
++    if (lastId && library.value.boards.some((b) => b.id === lastId)) {
++      currentBoardId.value = lastId;
++    }
++    saveStatus.value = 'saved';
++  } catch {
++    saveStatus.value = 'error';
++    showToast('保存領域を読み込めませんでした。変更が保存されない可能性があります');
++  } finally {
++    ready.value = true;
+   }
+-  ready.value = true;
+ }
+ 
+ let saveTimer: ReturnType<typeof setTimeout> | undefined;
+ function scheduleSave(): void {
+   if (saveTimer) clearTimeout(saveTimer);
++  saveStatus.value = 'saving';
+   saveTimer = setTimeout(() => {
+-    void kvSet(LIBRARY_KEY, library.value);
++    void kvSet(LIBRARY_KEY, library.value)
++      .then(() => { saveStatus.value = 'saved'; })
++      .catch(() => {
++        saveStatus.value = 'error';
++        showToast('保存に失敗しました。ライブラリを書き出して退避してください');
++      });
+   }, SAVE_DEBOUNCE_MS);
+ }
+ 
+@@ -294,13 +317,17 @@ export function exportLibraryJson(): string {
+   return JSON.stringify(library.value, null, 2);
+ }
+ 
+-/** 書き出したJSONを読み込み、ライブラリを置き換える。schemaが一致しない場合は例外を投げる。 */
+-export function importLibraryJson(text: string): void {
+-  const parsed = JSON.parse(text) as Library;
+-  if (parsed.schema !== SCHEMA) {
+-    throw new Error(`未対応のファイル形式です(${parsed.schema ?? '不明'})`);
+-  }
+-  library.value = parsed;
++/** 検証済みライブラリだけを現在データへ反映する。 */
++export function replaceLibrary(next: Library): void {
++  library.value = next;
+   currentBoardId.value = null;
++  selectedSpotId.value = null;
++  resetUndoHistory();
+   scheduleSave();
+ }
++
++/** 書き出したJSONをruntime validationしてから置き換える。失敗時は現在データを変更しない。 */
++export function importLibraryJson(text: string): void {
++  const parsed = parseLibraryJson(text);
++  replaceLibrary(parsed);
++}
+diff --git a/src/styles.css b/src/styles.css
+index 7ff416f..fc2c174 100644
+--- a/src/styles.css
++++ b/src/styles.css
+@@ -1587,3 +1587,12 @@ button {
+   padding-left: 18px;
+   font-size: var(--fs-sm);
+ }
++
++/* 保存状態。通常は控えめ、失敗時だけ強く見せる */
++.save-status {
++  font-size: var(--fs-xs);
++  color: var(--muted-text);
++  white-space: nowrap;
++}
++.save-status.is-saving { opacity: 0.75; }
++.save-status.is-error { color: var(--vermilion); font-weight: 600; }
+diff --git a/test/export.test.ts b/test/export.test.ts
+index 3315d03..c960d29 100644
+--- a/test/export.test.ts
++++ b/test/export.test.ts
+@@ -1,5 +1,5 @@
+ import { describe, expect, it } from 'vitest';
+-import { boardToMarkdown, boardToExportJson } from '../src/export';
++import { boardToLines, boardToMarkdown, boardToExportJson, proofInstructionLinesBySpot } from '../src/export';
+ import { newBoard, type Spot } from '../src/schema';
+ 
+ function makeDraftBoard() {
+@@ -161,3 +161,50 @@ describe('boardToExportJson', () => {
+     expect(json.pages[0].image).toEqual({ width: 1600, height: 900 });
+   });
+ });
++
++
++describe('Product Contract: geometry instructions', () => {
++  it('横移動だけならX軸の現在値→目標値を出す', () => {
++    const board = makeDraftBoard();
++    board.spots[0].notes = [];
++    board.spots[0].targetRect = { ...board.spots[0].rect, x: 0.13 };
++    const md = boardToMarkdown(board);
++    expect(md).toContain('横位置: 右へ 5%(8% → 13%)');
++    expect(md).not.toContain('縦位置:');
++  });
++
++  it('縦移動だけならY軸の現在値→目標値を出す', () => {
++    const board = makeDraftBoard();
++    board.spots[0].notes = [];
++    board.spots[0].targetRect = { ...board.spots[0].rect, y: 0.08 };
++    const md = boardToMarkdown(board);
