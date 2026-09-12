@@ -7,7 +7,7 @@ import { fileToImage } from '../lib/image';
 import { tally, type TallyEntry } from '../lib/audit';
 import { prepareHandoff } from '../lib/handoff';
 import { copyText } from '../lib/clipboard';
-import { protocolGroupCount, protocolPageGroups } from '../lib/protocolPages';
+import { protocolPageGroups } from '../lib/protocolPages';
 import {
   activePageId,
   addAndOpenBoard,
