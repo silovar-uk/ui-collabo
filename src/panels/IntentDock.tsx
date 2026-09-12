@@ -9,12 +9,13 @@ export function IntentDock({ board }: { board: Board }) {
   const suggestions = useMemo(() => intentSuggestions(query), [query]);
 
   if (!spot) return null;
+  const spotId = spot.id;
 
   function apply(index: number) {
     const suggestion = suggestions[index];
     if (!suggestion) return;
     updateBoard((current) => {
-      const currentSpot = current.spots.find((candidate) => candidate.id === spot.id);
+      const currentSpot = current.spots.find((candidate) => candidate.id === spotId);
       return currentSpot ? suggestion.command.apply(current, currentSpot) : current;
     });
     setQuery('');
