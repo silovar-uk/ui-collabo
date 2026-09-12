@@ -1,0 +1,35 @@
+name: Apply contract patch
+
+on:
+  push:
+    branches: [fix/contract-audit]
+    paths:
+      - '.automation/APPLY'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: apply-contract-patch
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/contract-audit
+          fetch-depth: 0
+      - name: Apply prepared patch
+        run: |
+          if [ ! -f .automation/APPLY ]; then exit 0; fi
+          cat .automation/contract.patch.* > /tmp/contract.patch
+          git apply --check /tmp/contract.patch
+          git apply /tmp/contract.patch
+          rm -f .automation/APPLY .automation/contract.patch.*
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Fix product contract across export, handoff, rounds and storage"
+          git push origin HEAD:fix/contract-audit
