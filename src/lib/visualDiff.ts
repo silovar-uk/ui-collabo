@@ -117,7 +117,7 @@ export function detectVisualDiffRegions(
   const changed = new Array<boolean>(cols * rows).fill(false);
   const kinds = new Array<DiffKind>(cols * rows).fill('unexpected');
   const scores = new Array<number>(cols * rows).fill(0);
-  const targetIds = new Array<string[]>(cols * rows).fill(null).map(() => []);
+  const targetIds: string[][] = Array.from({ length: cols * rows }, () => []);
   let changedPixels = 0;
 
   for (let row = 0; row < rows; row += 1) {
