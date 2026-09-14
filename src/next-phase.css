@@ -1,4 +1,4 @@
-/* Next phase: mobile pager + revision lineage. Existing LAB visual language stays primary. */
+/* Next phase: mobile pager + revision lineage + visual verification assist. Existing LAB visual language stays primary. */
 .mobile-page-pager {
   display: none;
 }
@@ -40,6 +40,90 @@
 .board-lineage-round {
   font-weight: 700;
   margin-right: 8px;
+}
+
+.visual-diff-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
+}
+
+.visual-diff-region {
+  position: absolute;
+  min-width: 8px;
+  min-height: 8px;
+  border: 2px solid var(--ink, #1c1b19);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.visual-diff-region.is-unexpected {
+  border: 3px dashed var(--vermilion, #e4572e);
+  background: rgba(228, 87, 46, 0.08);
+}
+
+.visual-diff-region > span {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform: translateY(-100%);
+  padding: 2px 4px;
+  background: var(--ink, #1c1b19);
+  color: var(--paper, #f7f4ee);
+  font-size: 9px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.visual-diff-region.is-unexpected > span {
+  background: var(--vermilion, #e4572e);
+}
+
+.visual-diff-controls {
+  position: absolute;
+  top: var(--sp-2, 8px);
+  right: var(--sp-2, 8px);
+  z-index: 6;
+  display: flex;
+  max-width: min(360px, calc(100% - 16px));
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px 8px;
+  padding: 6px;
+  border: 1px solid var(--line, #d9d3c7);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 2px 8px rgba(28, 27, 25, 0.12);
+}
+
+.visual-diff-toggle.is-active {
+  border-color: var(--ink, #1c1b19);
+  font-weight: 700;
+}
+
+.visual-diff-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 10px;
+}
+
+.visual-diff-summary b {
+  font-size: 12px;
+}
+
+.visual-diff-warning {
+  color: var(--vermilion, #e4572e);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.visual-diff-controls small {
+  flex: 0 0 100%;
+  text-align: right;
+  color: var(--muted-text, #6e695f);
+  font-size: 9px;
 }
 
 @media (max-width: 920px) {
@@ -92,6 +176,12 @@
     overflow: hidden;
     text-overflow: ellipsis;
   }
+
+  .visual-diff-controls {
+    top: 4px;
+    right: 4px;
+    max-width: calc(100% - 8px);
+  }
 }
 
 @media (max-width: 520px) {
@@ -100,6 +190,14 @@
   }
 
   .lab-bench-readouts:has(.mobile-page-pager) > span {
+    display: none;
+  }
+
+  .visual-diff-controls small {
+    display: none;
+  }
+
+  .visual-diff-region > span {
     display: none;
   }
 }
