@@ -11,7 +11,9 @@ import {
   replaceLibrary,
   saveAsTemplate,
 } from '../state';
+import { buildLineages } from '../lib/lineage';
 import { parseLibraryJson } from '../lib/libraryValidation';
+import { BoardLineageGroup } from './BoardLineageGroup';
 import { Drawer } from './Drawer';
 import type { Board } from '../schema';
 
@@ -32,6 +34,7 @@ function backupName(): string {
 export function LibraryDrawer({ board, onClose }: { board: Board; onClose: () => void }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const lib = library.value;
+  const lineages = buildLineages(lib.boards);
 
   function download() {
     downloadText(exportLibraryJson(), 'ui-collabo-library.json');
@@ -69,17 +72,20 @@ export function LibraryDrawer({ board, onClose }: { board: Board; onClose: () =>
         </div>
 
         <div class="field">
-          <span class="field-label">保存したボード</span>
-          <ul class="board-list">
-            {lib.boards.map((b) => (
-              <li key={b.id}>
-                <button class="board-list-item" disabled={b.id === board.id} onClick={() => { openBoard(b.id); onClose(); }}>
-                  {b.title}{b.id === board.id ? '(このボード)' : ''}
-                </button>
-                <button class="board-list-delete" onClick={() => deleteBoard(b.id)}>削除</button>
-              </li>
-            ))}
-          </ul>
+          <span class="field-label">保存したボード / 版</span>
+          {lineages.length === 0 ? (
+            <p class="muted">まだありません</p>
+          ) : (
+            lineages.map((lineage) => (
+              <BoardLineageGroup
+                key={lineage.root.id}
+                lineage={lineage}
+                currentBoardId={board.id}
+                onOpen={(id) => { openBoard(id); onClose(); }}
+                onDelete={deleteBoard}
+              />
+            ))
+          )}
         </div>
 
         <div class="field">

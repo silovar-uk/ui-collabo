@@ -5,6 +5,7 @@ import './styles.css';
 import './lab.css';
 import './focus.css';
 import './protocol.css';
+import './next-phase.css';
 
 void init();
 render(<App />, document.getElementById('app')!);
