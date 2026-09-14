@@ -53,13 +53,29 @@
   position: absolute;
   min-width: 8px;
   min-height: 8px;
+  margin: 0;
+  padding: 0;
   border: 2px solid var(--ink, #1c1b19);
   background: rgba(255, 255, 255, 0.06);
+  font: inherit;
 }
 
 .visual-diff-region.is-unexpected {
+  min-width: 28px;
+  min-height: 28px;
   border: 3px dashed var(--vermilion, #e4572e);
   background: rgba(228, 87, 46, 0.08);
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.visual-diff-region.is-unexpected:hover,
+.visual-diff-region.is-unexpected:focus-visible,
+.visual-diff-region.is-unexpected.is-selected {
+  background: rgba(228, 87, 46, 0.18);
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 5px rgba(228, 87, 46, 0.58);
 }
 
 .visual-diff-region > span {
@@ -85,7 +101,7 @@
   right: var(--sp-2, 8px);
   z-index: 6;
   display: flex;
-  max-width: min(360px, calc(100% - 16px));
+  max-width: min(400px, calc(100% - 16px));
   flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
@@ -119,11 +135,38 @@
   font-weight: 700;
 }
 
+.visual-diff-triage {
+  display: flex;
+  flex: 0 0 100%;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--line, #d9d3c7);
+}
+
+.visual-diff-triage strong {
+  margin-right: auto;
+  font-size: 10px;
+}
+
+.visual-diff-triage .btn-sm {
+  min-height: 32px;
+}
+
+.visual-diff-ignore {
+  color: var(--muted-text, #6e695f);
+}
+
 .visual-diff-controls small {
   flex: 0 0 100%;
   text-align: right;
   color: var(--muted-text, #6e695f);
   font-size: 9px;
+}
+
+.visual-diff-triage-result {
+  font-weight: 700;
 }
 
 @media (max-width: 920px) {
@@ -182,6 +225,11 @@
     right: 4px;
     max-width: calc(100% - 8px);
   }
+
+  .visual-diff-region.is-unexpected {
+    min-width: 36px;
+    min-height: 36px;
+  }
 }
 
 @media (max-width: 520px) {
@@ -193,11 +241,25 @@
     display: none;
   }
 
-  .visual-diff-controls small {
+  .visual-diff-controls > small:not(.visual-diff-triage-result) {
     display: none;
   }
 
   .visual-diff-region > span {
     display: none;
+  }
+
+  .visual-diff-triage {
+    align-items: stretch;
+    flex-wrap: wrap;
+  }
+
+  .visual-diff-triage strong {
+    flex: 0 0 100%;
+  }
+
+  .visual-diff-triage .btn-sm {
+    flex: 1 1 120px;
+    min-height: 40px;
   }
 }
