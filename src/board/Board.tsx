@@ -56,7 +56,8 @@ export function Board() {
   const cr = containRect(boxSize.width, boxSize.height, canvasSize.width, canvasSize.height);
 
   function onSurfacePointerDown(e: PointerEvent) {
-    if ((e.target as HTMLElement).closest('.spot-rect, .edit-box, .palette')) return;
+    const target = e.target as HTMLElement;
+    if (target.closest('button, input, select, textarea, a, .spot-rect, .edit-box, .palette')) return;
     const el = containerRef.current;
     if (!el) return;
     const rectBox = el.getBoundingClientRect();
