@@ -3,13 +3,14 @@ import { activePageId, currentBoard, currentBoardId, ready, saveStatus, selected
 import { extractImageFiles } from './lib/image';
 import { handleFiles, handleHtml } from './lib/intake';
 import { hasSpecifiedContent } from './export';
-import { isProofed } from './lib/round';
+import { deriveWorkflowState, workflowPhaseIndex } from './lib/workflow';
 import { Board } from './board/Board';
 import { HtmlBoard } from './board/HtmlBoard';
 import { Empty } from './panels/Empty';
 import { Sheet } from './panels/Sheet';
 import { IntentDock } from './panels/IntentDock';
 import { LeaderLine } from './panels/LeaderLine';
+import { PagePager } from './panels/PagePager';
 import { ExportDrawer } from './panels/ExportDrawer';
 import { RulesDrawer } from './panels/RulesDrawer';
 import { LibraryDrawer } from './panels/LibraryDrawer';
@@ -30,16 +31,6 @@ const LAB_PHASES = [
 
 function droppedHtmlFile(dt: DataTransfer): File | null {
   return Array.from(dt.files ?? []).find((f) => /\.html?$/i.test(f.name)) ?? null;
-}
-
-function labPhase(board: BoardModel): number {
-  if (isProofed(board) || board.round) return 4;
-  const activeSpots = board.spots.filter((spot) => !spot.keep);
-  const specified = activeSpots.filter((spot) => hasSpecifiedContent(spot, board));
-  if (specified.length > 0) return 3;
-  if (activeSpots.length > 0) return 2;
-  if (board.pages.some((page) => !!page.image || !!page.source)) return 1;
-  return 0;
 }
 
 function formatLabel(board: BoardModel): string {
@@ -96,13 +87,19 @@ export function App() {
 
   const board = currentBoard.value;
   const page = board?.pages.find((p) => p.id === activePageId.value) ?? null;
-  const phase = board ? labPhase(board) : 0;
+  const workflow = board ? deriveWorkflowState(board) : 'input';
+  const phase = workflowPhaseIndex(workflow);
   const activeSpots = board?.spots.filter((spot) => !spot.keep) ?? [];
   const specifiedCount = board ? activeSpots.filter((spot) => hasSpecifiedContent(spot, board)).length : 0;
   const keptCount = board?.spots.filter((spot) => spot.keep).length ?? 0;
   const pageIndex = board && page ? board.pages.findIndex((p) => p.id === page.id) : -1;
   const specimenKind = page?.source ? 'HTML' : page?.image ? 'IMAGE' : 'BLANK';
   const specimenSize = page?.image ? `${page.image.width}×${page.image.height}` : null;
+  const captureViewport = page?.source?.capture
+    ? `${page.source.capture.viewportWidth}×${page.source.capture.viewportHeight}`
+    : page?.source
+      ? `${page.source.width}px`
+      : null;
   const benchHint = page?.source
     ? '要素をクリックして気になる箇所を選ぶ'
     : page?.image
@@ -166,7 +163,7 @@ export function App() {
       </header>
 
       {board && (
-        <div class="lab-sequence" aria-label={`現在の工程: ${LAB_PHASES[phase].ja}`}>
+        <div class={`lab-sequence${workflow === 'proofed' ? ' is-proofed' : ''}`} aria-label={`現在の工程: ${workflow === 'proofed' ? '校了' : LAB_PHASES[phase].ja}`}>
           <div class="lab-sequence-meta">
             <span class="lab-micro-label">PROTOCOL</span>
             <strong>{board.round ? 'REVISION' : 'BASE'} / {formatLabel(board)}</strong>
@@ -176,7 +173,7 @@ export function App() {
               <li class={`${index === phase ? 'is-current' : ''}${index < phase ? ' is-complete' : ''}`} key={item.code}>
                 <span class="lab-phase-code">{item.code}</span>
                 <span class="lab-phase-en">{item.en}</span>
-                <span class="lab-phase-ja">{item.ja}</span>
+                <span class="lab-phase-ja">{workflow === 'proofed' && index === 4 ? '校了' : item.ja}</span>
               </li>
             ))}
           </ol>
@@ -225,7 +222,9 @@ export function App() {
               <div class="lab-bench-readouts">
                 <span>TYPE <b>{specimenKind}</b></span>
                 {specimenSize && <span>SIZE <b>{specimenSize}</b></span>}
+                {captureViewport && <span>VIEWPORT <b>{captureViewport}</b></span>}
                 <span>MARKS <b>{String(activeSpots.length).padStart(2, '0')}</b></span>
+                <PagePager board={board} currentPageId={activePageId.value} />
               </div>
               <span class="lab-bench-hint">{benchHint}</span>
             </div>
