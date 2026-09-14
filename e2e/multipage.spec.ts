@@ -10,10 +10,11 @@ test('mobile can switch pages without specimen rail', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await seedBoard(page, baseBoard(pages));
   await expect(page.locator('.specimen-rail')).toBeHidden();
-  await expect(page.locator('.mobile-page-pager')).toBeVisible();
-  await expect(page.getByText('First', { exact: true })).toBeVisible();
+  const pager = page.getByLabel('ページを切り替える');
+  await expect(pager).toBeVisible();
+  await expect(pager.getByText('First', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: '次のページ' }).click();
-  await expect(page.getByText('Second', { exact: true })).toBeVisible();
+  await expect(pager.getByText('Second', { exact: true })).toBeVisible();
 });
 
 test('desktop keeps specimen rail and hides compact pager', async ({ page }) => {
