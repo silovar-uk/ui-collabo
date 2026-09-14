@@ -11,13 +11,17 @@ function absoluteUrl(value: string, baseUrl: string): string {
 
 /** CSS内の相対url()を、元のページ/stylesheetを基準に絶対URLへ直す。 */
 export function rebaseCssUrls(css: string, baseUrl: string): string {
-  return css.replace(/url\(\s*(["']?)([^"')]+)\1\s*\)/gi, (full, quote: string, rawValue: string) => {
+  const rebasedUrls = css.replace(/url\(\s*(["']?)([^"')]+)\1\s*\)/gi, (full, quote: string, rawValue: string) => {
     const value = rawValue.trim();
     if (/^javascript:/i.test(value)) return 'url("")';
     const rebased = absoluteUrl(value, baseUrl);
     if (rebased === value) return full;
     const q = quote || '"';
     return `url(${q}${rebased}${q})`;
+  });
+  return rebasedUrls.replace(/@import\s+(["'])([^"']+)\1/gi, (full, quote: string, rawValue: string) => {
+    const rebased = absoluteUrl(rawValue.trim(), baseUrl);
+    return rebased === rawValue.trim() ? full : `@import ${quote}${rebased}${quote}`;
   });
 }
 
@@ -75,9 +79,12 @@ export function sanitizeHtml(raw: string, explicitOrigin?: string): { html: stri
   const embeddedOrigin = doc.querySelector('meta[name="uic-origin"]')?.getAttribute('content') ?? undefined;
   const origin = explicitOrigin || embeddedOrigin;
 
-  // 取り込み元のbase要素がUI ColLabo内のリンク解決を乗っ取らないよう除去し、
-  // 必要なリソースURLはoriginを使って明示的に正規化する。
+  // 取り込み元のbase/CSP/refreshがUI ColLabo内のURL解決や表示状態を乗っ取らないよう除去する。
   doc.querySelectorAll('base').forEach((el) => el.remove());
+  doc.querySelectorAll('meta[http-equiv]').forEach((el) => {
+    const value = el.getAttribute('http-equiv')?.trim().toLowerCase();
+    if (value === 'content-security-policy' || value === 'refresh') el.remove();
+  });
   doc.querySelectorAll('script, iframe, object, embed').forEach((el) => el.remove());
   doc.querySelectorAll('*').forEach((el) => {
     for (const attr of Array.from(el.attributes)) {
