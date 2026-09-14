@@ -24,7 +24,7 @@ export async function handleFiles(files: File[]): Promise<void> {
 
 /** HTMLをページとしてボードに取り込む。ボードがなければ新規作成する。 */
 export async function handleHtml(rawHtml: string, opts: { origin?: string; allowExternal: boolean }): Promise<void> {
-  const { html, title, origin } = sanitizeHtml(rawHtml);
+  const { html, title, origin } = sanitizeHtml(rawHtml, opts.origin);
   const isNewBoard = !currentBoard.value;
   if (isNewBoard) createBoard({ kind: 'web' });
   const page: Page = {
@@ -34,7 +34,7 @@ export async function handleHtml(rawHtml: string, opts: { origin?: string; allow
       kind: 'html',
       html,
       title,
-      origin: opts.origin || origin,
+      origin,
       allowExternal: opts.allowExternal,
       width: 1280,
       height: 800,
