@@ -1,7 +1,5 @@
-import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-
-const emptySource = readFileSync(new URL('../src/panels/Empty.tsx', import.meta.url), 'utf8');
+import emptySource from '../src/panels/Empty.tsx?raw';
 
 describe('lab home layout contract', () => {
   it('旧empty-screenの880px制約をLABトップへ再適用しない', () => {
