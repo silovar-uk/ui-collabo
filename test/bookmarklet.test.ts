@@ -1,7 +1,5 @@
-import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-
-const source = readFileSync(new URL('../public/bookmarklet.js', import.meta.url), 'utf8');
+import source from '../public/bookmarklet.js?raw';
 
 describe('bookmarklet capture contract', () => {
   it('flattening後に壊れる行コメントを含めない', () => {
