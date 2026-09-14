@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "test": "vitest run",
+    "test": "vitest run --dir test",
     "test:e2e": "playwright test",
     "assets": "node scripts/render-assets.mjs"
   },
