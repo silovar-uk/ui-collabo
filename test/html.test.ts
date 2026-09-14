@@ -15,7 +15,7 @@ describe('HTML intake reliability', () => {
           <meta name="uic-origin" content="https://example.com/dir/page.html">
           <base href="https://evil.example/">
           <link rel="stylesheet" href="./css/main.css">
-          <style>.hero{background-image:url('../img/bg.png')}</style>
+          <style>@import "./css/extra.css"; .hero{background-image:url('../img/bg.png')}</style>
         </head>
         <body>
           <img src="./img/a.png" srcset="./img/a.png 1x, ./img/a@2x.png 2x">
@@ -36,6 +36,7 @@ describe('HTML intake reliability', () => {
     expect(doc.querySelector('video')?.getAttribute('poster')).toBe('https://example.com/video/poster.jpg');
     expect(doc.querySelector('div')?.getAttribute('style')).toContain('https://example.com/dir/img/inline.png');
     expect(doc.querySelector('style')?.textContent).toContain('https://example.com/img/bg.png');
+    expect(doc.querySelector('style')?.textContent).toContain('https://example.com/dir/css/extra.css');
     expect(doc.querySelector('a')?.getAttribute('href')).toBe('#section');
   });
 
@@ -64,6 +65,18 @@ describe('HTML intake reliability', () => {
     expect(doc.querySelector('button')?.hasAttribute('onclick')).toBe(false);
     expect(doc.querySelector('a')?.hasAttribute('href')).toBe(false);
     expect(doc.querySelector('div')?.getAttribute('style')).not.toContain('javascript:');
+  });
+
+  it('取り込み元のCSPとmeta refreshを捨て、preview側の制御を優先する', () => {
+    const result = sanitizeHtml(`
+      <html><head>
+        <meta http-equiv="Content-Security-Policy" content="default-src 'none'">
+        <meta http-equiv="refresh" content="0;url=https://example.org/away">
+      </head><body>safe</body></html>
+    `);
+    const doc = new DOMParser().parseFromString(result.html, 'text/html');
+    expect(doc.querySelector('meta[http-equiv="Content-Security-Policy"]')).toBeNull();
+    expect(doc.querySelector('meta[http-equiv="refresh"]')).toBeNull();
   });
 
   it('CSS url()はdata/blob/fragmentを壊さず相対URLだけ直す', () => {
