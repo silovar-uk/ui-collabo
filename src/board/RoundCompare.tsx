@@ -26,6 +26,7 @@ export function RoundCompare({ board, pageId }: { board: Board; pageId: string }
       if (spot.targetRect) targets.push({ id: spot.id, rect: spot.targetRect });
       return targets;
     });
+  const expectedSpotCount = new Set(expectedTargets.map((target) => target.id)).size;
   const targetKey = expectedTargets
     .map((target) => `${target.id}:${target.rect.x},${target.rect.y},${target.rect.w},${target.rect.h}`)
     .join('|');
@@ -79,7 +80,7 @@ export function RoundCompare({ board, pageId }: { board: Board; pageId: string }
         </div>
       )}
 
-      <div class="visual-diff-controls">
+      <div class="visual-diff-controls" data-expected-spots={expectedSpotCount}>
         <button
           type="button"
           class={`btn-sm visual-diff-toggle${showDiff ? ' is-active' : ''}`}
@@ -89,13 +90,15 @@ export function RoundCompare({ board, pageId }: { board: Board; pageId: string }
         >
           {diffState === 'loading' ? '差分を計算中…' : showDiff ? '差分候補 ON' : '差分候補'}
         </button>
-        {showDiff && diff && (
+        {showDiff && (
           <div class="visual-diff-summary" role="status">
-            <span>指示内 <b>{diff.expected.length}</b></span>
-            <span>想定外 <b>{diff.unexpected.length}</b></span>
-            {diff.dimensionMismatch && <span class="visual-diff-warning">画像サイズ差あり</span>}
+            <span>指示対象 <b>{expectedSpotCount}</b></span>
+            {diff && <span>指示内 <b>{diff.expected.length}</b></span>}
+            {diff && <span>想定外 <b>{diff.unexpected.length}</b></span>}
+            {diff?.dimensionMismatch && <span class="visual-diff-warning">画像サイズ差あり</span>}
           </div>
         )}
+        {showDiff && expectedSpotCount === 0 && <span class="visual-diff-warning">比較対象の指示なし</span>}
         {showDiff && diffState === 'error' && <span class="visual-diff-warning">差分を計算できません</span>}
         {showDiff && <small>候補表示のみ。○/×は人が確認</small>}
       </div>
