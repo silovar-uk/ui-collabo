@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'preact/hooks';
+import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { handleHtml } from '../lib/intake';
 import { isUiCollaboCapture } from '../lib/html';
 import { BOOKMARKLET_URL } from '../bookmarklet';
@@ -11,7 +11,7 @@ export function HtmlIntakeDialog({ onClose }: { onClose: () => void }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const modalRef = useRef<HTMLDivElement>(null);
 
-  const captureDetected = !!text.trim() && isUiCollaboCapture(text);
+  const captureDetected = useMemo(() => !!text.trim() && isUiCollaboCapture(text), [text]);
   const effectiveAllowExternal = externalChoiceTouched ? allowExternal : captureDetected;
 
   useEffect(() => {
