@@ -18,9 +18,11 @@ UI ColLabo remains local-first and does not embed AI inference. The next phase i
 - Bookmarklet capture contract records viewport width, viewport height and device pixel ratio.
 - HTML intake uses the captured viewport width for iframe layout/media-query fidelity, with the legacy 1280×800 fallback when metadata is absent.
 - Chromium Playwright smoke tests cover responsive overflow, multi-page navigation and captured HTML media queries.
-- Revision screenshots can now be compared as visual-diff candidates. The browser downsamples both images, removes low-level pixel noise, groups changed cells into regions, and classifies each region as `expected` or `unexpected` according to overlap with carried instruction areas.
-- Expected/unexpected regions are transient verification assistance only. They are not persisted and never set a Spot to OK/NG automatically; the user remains responsible for the final verification decision.
-- Browser E2E covers one instructed image change and one uninstructed image change in the same revision.
+- Revision screenshots can be compared as visual-diff candidates. The browser downsamples both images, removes low-level pixel noise, groups changed cells into regions, and classifies each region as instructed or needing review according to overlap with carried instruction areas.
+- A review candidate is actionable: selecting it offers `修正指示にする`, which promotes the region to a normal Spot and immediately returns the user to the existing Palette / Handoff workflow.
+- A candidate can also be ignored for the current screen session. Ignore state is intentionally transient and returns after reload; no verification-history schema is introduced yet.
+- Diff regions never set a Spot to OK/NG automatically; the user remains responsible for final verification.
+- Browser E2E covers instructed vs uninstructed changes, promotion to a normal Spot, and transient ignore.
 
 ## Visual diff contract
 
@@ -30,7 +32,7 @@ Input:
 
 - previous revision image
 - current revision image
-- carried, unresolved Spot rectangles for the current page
+- carried Spot rectangles for the current page
 - optional `targetRect` rectangles
 
 Output:
@@ -41,22 +43,34 @@ Output:
 
 The default algorithm uses a reduced-resolution canvas, color/alpha thresholding, cell aggregation and connected-region grouping. The result is a review aid, not proof that a requested correction is semantically correct.
 
+## Diff triage contract
+
+`src/lib/diffTriage.ts` bridges a transient visual-diff region back into the existing product model.
+
+- An unexpected region receives a geometry-based transient key for the current screen session.
+- `修正指示にする` creates a standard Spot with that region rectangle, `keep: false`, and no notes yet.
+- The newly created Spot is selected immediately, so the existing Palette is responsible for describing the desired correction.
+- The Spot does not receive a special diff-origin schema flag. Once promoted, it behaves exactly like any other new instruction.
+- `今回は無視` only hides the candidate in local component state. It is deliberately not persisted.
+
+This preserves the core loop: `発見 → Spot化 → 指示を選ぶ → Handoff` without introducing a second task system beside Spots.
+
 ## Compatibility
 
 `SCHEMA` remains `ui-collabo/1`. `PageSource.capture` is optional, therefore existing saved libraries remain valid. Old HTML captures continue to use their existing `width`/`height` values and new raw HTML without metadata falls back to 1280×800.
 
-No diff bitmap or visual-diff result is stored in IndexedDB, so this phase does not increase saved-library payload size.
+No diff bitmap, visual-diff result or ignore state is stored in IndexedDB, so this phase does not increase saved-library payload size.
 
 ## Deliberately deferred
 
+- Persisted `accepted side effect` / ignore history. Usage should prove that distinction before a verification schema is added.
 - AssetStore split for large image/HTML payloads.
 - Browser Extension capture transport.
 - Formal Project / Instruction schemas.
-- Persisted verification history for visual-diff regions.
 - DOM/computed-style diff for HTML revisions.
 
 Do not add new large data URLs directly to `Board`; the next storage migration should separate metadata from heavy assets.
 
 ## Next experiment
 
-The next useful experiment is to make unexpected regions actionable without turning them into automatic errors: allow a user to convert one candidate region into a normal Spot, dismiss it for the current review, or mark it as an accepted side effect. That interaction should remain local UI state until the workflow proves valuable enough to justify a persisted verification schema.
+After the actionable-diff loop is used in practice, inspect whether users repeatedly need to distinguish `intentional side effect` from `temporary noise`. Only then consider persisting a verification decision. The alternative next branch is Keep Verification: make `変えない` areas first-class in revision checking so the tool can report both requested change and protected-area stability.
