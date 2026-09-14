@@ -2,10 +2,10 @@ import type { Page } from '@playwright/test';
 
 type SeedBoard = Record<string, unknown>;
 
-export async function seedBoard(page: Page, board: SeedBoard) {
+export async function seedBoards(page: Page, boards: SeedBoard[], currentBoardId: string) {
   await page.goto('/');
   await page.locator('#app').waitFor();
-  await page.evaluate(async (seed) => {
+  await page.evaluate(async ({ seeds, activeId }) => {
     const db = await new Promise<IDBDatabase>((resolve, reject) => {
       const req = indexedDB.open('ui-collabo', 1);
       req.onsuccess = () => resolve(req.result);
@@ -17,11 +17,15 @@ export async function seedBoard(page: Page, board: SeedBoard) {
       tx.oncomplete = () => resolve();
       tx.onerror = () => reject(tx.error);
     });
-    await put('library', { schema: 'ui-collabo/1', boards: [seed], templates: [], ruleSets: [] });
-    await put('lastBoardId', String(seed.id));
+    await put('library', { schema: 'ui-collabo/1', boards: seeds, templates: [], ruleSets: [] });
+    await put('lastBoardId', activeId);
     db.close();
-  }, board);
+  }, { seeds: boards, activeId: currentBoardId });
   await page.reload();
+}
+
+export async function seedBoard(page: Page, board: SeedBoard) {
+  await seedBoards(page, [board], String(board.id));
 }
 
 export function baseBoard(pages: unknown[]) {
