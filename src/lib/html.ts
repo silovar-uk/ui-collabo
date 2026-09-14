@@ -2,14 +2,9 @@ const SKIP_ABSOLUTIZE_RE = /^\s*(?:#|data:|blob:|javascript:|mailto:|tel:)/i;
 
 function absoluteUrl(value: string, baseUrl: string): string {
   if (!value.trim() || SKIP_ABSOLUTIZE_RE.test(value)) return value;
-  try {
-    return new URL(value, baseUrl).href;
-  } catch {
-    return value;
-  }
+  try { return new URL(value, baseUrl).href; } catch { return value; }
 }
 
-/** CSS内の相対url()を、元のページ/stylesheetを基準に絶対URLへ直す。 */
 export function rebaseCssUrls(css: string, baseUrl: string): string {
   const rebasedUrls = css.replace(/url\(\s*(["']?)([^"')]+)\1\s*\)/gi, (full, quote: string, rawValue: string) => {
     const value = rawValue.trim();
@@ -26,18 +21,14 @@ export function rebaseCssUrls(css: string, baseUrl: string): string {
 }
 
 function rebaseSrcset(value: string, baseUrl: string): string {
-  // data URL はカンマを含むため、すでに自己完結しているsrcsetは触らない。
   if (/^\s*data:/i.test(value)) return value;
-  return value
-    .split(',')
-    .map((candidate) => {
-      const trimmed = candidate.trim();
-      if (!trimmed) return trimmed;
-      const match = trimmed.match(/^(\S+)(\s+.+)?$/);
-      if (!match) return trimmed;
-      return `${absoluteUrl(match[1], baseUrl)}${match[2] ?? ''}`;
-    })
-    .join(', ');
+  return value.split(',').map((candidate) => {
+    const trimmed = candidate.trim();
+    if (!trimmed) return trimmed;
+    const match = trimmed.match(/^(\S+)(\s+.+)?$/);
+    if (!match) return trimmed;
+    return `${absoluteUrl(match[1], baseUrl)}${match[2] ?? ''}`;
+  }).join(', ');
 }
 
 function normalizeResourceUrls(doc: Document, baseUrl: string): void {
@@ -66,20 +57,48 @@ function normalizeResourceUrls(doc: Document, baseUrl: string): void {
   });
 }
 
-/** UI ColLaboのブックマークレットで採取したHTMLかを判定する。 */
+function boundedMetaNumber(doc: Document, name: string, min: number, max: number): number | undefined {
+  const raw = doc.querySelector(`meta[name="${name}"]`)?.getAttribute('content');
+  if (!raw) return undefined;
+  const value = Number(raw);
+  return Number.isFinite(value) && value >= min && value <= max ? value : undefined;
+}
+
+export interface HtmlCaptureMetadata {
+  origin?: string;
+  viewportWidth?: number;
+  viewportHeight?: number;
+  devicePixelRatio?: number;
+}
+
+export function readCaptureMetadata(doc: Document): HtmlCaptureMetadata {
+  return {
+    origin: doc.querySelector('meta[name="uic-origin"]')?.getAttribute('content') ?? undefined,
+    viewportWidth: boundedMetaNumber(doc, 'uic-viewport-width', 240, 10000),
+    viewportHeight: boundedMetaNumber(doc, 'uic-viewport-height', 240, 50000),
+    devicePixelRatio: boundedMetaNumber(doc, 'uic-device-pixel-ratio', 0.5, 10),
+  };
+}
+
 export function isUiCollaboCapture(raw: string): boolean {
   const doc = new DOMParser().parseFromString(raw, 'text/html');
   return !!doc.querySelector('meta[name="uic-origin"][content]');
 }
 
-/** 貼り付け/ファイル/ブックマークレット経由のHTMLを、表示可能な安全な形にする。 */
-export function sanitizeHtml(raw: string, explicitOrigin?: string): { html: string; title?: string; origin?: string } {
+export interface SanitizedHtml {
+  html: string;
+  title?: string;
+  origin?: string;
+  viewportWidth?: number;
+  viewportHeight?: number;
+  devicePixelRatio?: number;
+}
+
+export function sanitizeHtml(raw: string, explicitOrigin?: string): SanitizedHtml {
   const doc = new DOMParser().parseFromString(raw, 'text/html');
+  const capture = readCaptureMetadata(doc);
+  const origin = explicitOrigin || capture.origin;
 
-  const embeddedOrigin = doc.querySelector('meta[name="uic-origin"]')?.getAttribute('content') ?? undefined;
-  const origin = explicitOrigin || embeddedOrigin;
-
-  // 取り込み元のbase/CSP/refreshがUI ColLabo内のURL解決や表示状態を乗っ取らないよう除去する。
   doc.querySelectorAll('base').forEach((el) => el.remove());
   doc.querySelectorAll('meta[http-equiv]').forEach((el) => {
     const value = el.getAttribute('http-equiv')?.trim().toLowerCase();
@@ -89,16 +108,19 @@ export function sanitizeHtml(raw: string, explicitOrigin?: string): { html: stri
   doc.querySelectorAll('*').forEach((el) => {
     for (const attr of Array.from(el.attributes)) {
       const name = attr.name.toLowerCase();
-      if (name.startsWith('on')) {
-        el.removeAttribute(attr.name);
-      } else if ((name === 'href' || name === 'src' || name === 'action' || name === 'poster') && /^\s*javascript:/i.test(attr.value)) {
-        el.removeAttribute(attr.name);
-      }
+      if (name.startsWith('on')) el.removeAttribute(attr.name);
+      else if ((name === 'href' || name === 'src' || name === 'action' || name === 'poster') && /^\s*javascript:/i.test(attr.value)) el.removeAttribute(attr.name);
     }
   });
 
   if (origin) normalizeResourceUrls(doc, origin);
-
   const title = doc.querySelector('title')?.textContent?.trim() || undefined;
-  return { html: doc.documentElement.outerHTML, title, origin };
+  return {
+    html: doc.documentElement.outerHTML,
+    title,
+    origin,
+    viewportWidth: capture.viewportWidth,
+    viewportHeight: capture.viewportHeight,
+    devicePixelRatio: capture.devicePixelRatio,
+  };
 }

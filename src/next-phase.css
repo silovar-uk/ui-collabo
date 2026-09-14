@@ -1,0 +1,105 @@
+/* Next phase: mobile pager + revision lineage. Existing LAB visual language stays primary. */
+.mobile-page-pager {
+  display: none;
+}
+
+.board-lineage-group {
+  margin: 0 0 10px;
+  border: 1px solid var(--line, #d7d5cf);
+  background: #fff;
+}
+
+.board-lineage-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--line, #d7d5cf);
+  background: #f7f8f5;
+}
+
+.board-lineage-head strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+.board-lineage-head span,
+.board-lineage-status {
+  color: var(--muted, #6f746f);
+  font-size: 10px;
+}
+
+.board-lineage-list {
+  margin: 0;
+}
+
+.board-lineage-round {
+  font-weight: 700;
+  margin-right: 8px;
+}
+
+@media (max-width: 920px) {
+  .mobile-page-pager {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    min-width: 146px;
+    height: 44px;
+  }
+
+  .mobile-page-pager button {
+    flex: 0 0 44px;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    border: 1px solid var(--lab-line-strong, #b8beb9);
+    background: #fff;
+    color: var(--lab-ink, #1c1b19);
+    font: inherit;
+    font-size: 22px;
+    line-height: 1;
+  }
+
+  .mobile-page-pager button:disabled {
+    opacity: .35;
+  }
+
+  .mobile-page-pager-label {
+    display: flex;
+    min-width: 54px;
+    flex: 1 1 auto;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    color: var(--lab-subtle, #59605b);
+    font-size: 9px;
+    line-height: 1.15;
+    white-space: nowrap;
+  }
+
+  .mobile-page-pager-label b {
+    color: var(--lab-ink, #1c1b19);
+    font-size: 10px;
+  }
+
+  .mobile-page-pager-label small {
+    max-width: 64px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+
+@media (max-width: 520px) {
+  .mobile-page-pager {
+    min-width: 132px;
+  }
+
+  .lab-bench-readouts:has(.mobile-page-pager) > span {
+    display: none;
+  }
+}

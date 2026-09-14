@@ -12,21 +12,21 @@ async function filesToPages(files: File[]): Promise<Page[]> {
   return pages;
 }
 
-/** 画像ファイルをページとしてボードに取り込む。ボードがなければ新規作成する。 */
 export async function handleFiles(files: File[]): Promise<void> {
   if (files.length === 0) return;
   const pages = await filesToPages(files);
   if (!currentBoard.value) createBoard({ kind: 'web' });
-  // H4: 画像を初めて受け取ったボードはimageRole='draft'で始める(あとから切替可能)
   updateBoard((b) => ({ ...b, imageRole: b.imageRole ?? 'draft', pages: [...b.pages, ...pages] }));
   activePageId.value = pages[0].id;
 }
 
-/** HTMLをページとしてボードに取り込む。ボードがなければ新規作成する。 */
 export async function handleHtml(rawHtml: string, opts: { origin?: string; allowExternal: boolean }): Promise<void> {
-  const { html, title, origin } = sanitizeHtml(rawHtml, opts.origin);
+  const { html, title, origin, viewportWidth, viewportHeight, devicePixelRatio } = sanitizeHtml(rawHtml, opts.origin);
   const isNewBoard = !currentBoard.value;
   if (isNewBoard) createBoard({ kind: 'web' });
+
+  const width = viewportWidth ?? 1280;
+  const height = viewportHeight ?? 800;
   const page: Page = {
     id: crypto.randomUUID(),
     image: null,
@@ -36,8 +36,9 @@ export async function handleHtml(rawHtml: string, opts: { origin?: string; allow
       title,
       origin,
       allowExternal: opts.allowExternal,
-      width: 1280,
-      height: 800,
+      width,
+      height,
+      capture: viewportWidth && viewportHeight ? { viewportWidth, viewportHeight, devicePixelRatio } : undefined,
     },
   };
   updateBoard((b) => ({
