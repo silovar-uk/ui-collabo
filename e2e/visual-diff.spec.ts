@@ -1,7 +1,7 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import { baseBoard, seedBoards } from './helpers';
 
-test('revision diff separates instructed and uninstructed changes', async ({ page }) => {
+async function seedVisualDiffReview(page: Page) {
   await page.setViewportSize({ width: 1200, height: 900 });
   await page.goto('/');
 
@@ -57,14 +57,44 @@ test('revision diff separates instructed and uninstructed changes', async ({ pag
   };
 
   await seedBoards(page, [previous, current], 'current');
+  await page.getByRole('button', { name: '差分候補を表示' }).click();
+}
+
+test('revision diff separates instructed and actionable changes', async ({ page }) => {
+  await seedVisualDiffReview(page);
+
   const controls = page.locator('.visual-diff-controls');
   await expect(controls).toHaveAttribute('data-expected-spots', '1');
-  await page.getByRole('button', { name: '差分候補を表示' }).click();
-
+  await expect(controls).toHaveAttribute('data-pending-unexpected', '1');
   await expect(page.locator('.visual-diff-summary')).toContainText('指示対象 1');
   await expect(page.locator('.visual-diff-region.is-expected')).toHaveCount(1);
-  await expect(page.locator('.visual-diff-region.is-unexpected')).toHaveCount(1);
+  await expect(page.getByRole('button', { name: '要確認の差分候補 1' })).toBeVisible();
   await expect(page.locator('.visual-diff-summary')).toContainText('指示内 1');
-  await expect(page.locator('.visual-diff-summary')).toContainText('想定外 1');
-  await expect(page.getByText('候補表示のみ。○/×は人が確認')).toBeVisible();
+  await expect(page.locator('.visual-diff-summary')).toContainText('要確認 1');
+  await expect(page.getByText('要確認候補を押すと修正指示にできます。○/×は人が確認')).toBeVisible();
+});
+
+test('unexpected diff can become a normal Spot and continue the existing workflow', async ({ page }) => {
+  await seedVisualDiffReview(page);
+
+  await page.getByRole('button', { name: '要確認の差分候補 1' }).click();
+  await expect(page.getByText('この変化をどうする？')).toBeVisible();
+  await page.getByRole('button', { name: '修正指示にする' }).click();
+
+  await expect(page.locator('.visual-diff-controls')).toHaveAttribute('data-pending-unexpected', '0');
+  await expect(page.getByRole('button', { name: '要確認の差分候補 1' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '箇所2 想定外の変更' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('.visual-diff-summary')).toContainText('要確認 0');
+  await expect(page.getByText('指示化 1')).toBeVisible();
+});
+
+test('unexpected diff can be ignored only for the current screen session', async ({ page }) => {
+  await seedVisualDiffReview(page);
+
+  await page.getByRole('button', { name: '要確認の差分候補 1' }).click();
+  await page.getByRole('button', { name: '今回は無視' }).click();
+
+  await expect(page.locator('.visual-diff-controls')).toHaveAttribute('data-pending-unexpected', '0');
+  await expect(page.locator('.visual-diff-summary')).toContainText('要確認 0');
+  await expect(page.getByText('無視 1（再読み込みで戻る）')).toBeVisible();
 });
