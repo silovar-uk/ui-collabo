@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'preact/hooks';
+import { useEffect, useMemo, useRef } from 'preact/hooks';
 import { auditHoverSelectors, auditRuleCheckRequest, htmlAuditRecords, lens, nextSpotNumber, selectedSpotId, spaceHeld, updateBoard } from '../state';
 import { containRect, clampRect } from '../lib/geometry';
 import { useBoxSize } from '../lib/useBoxSize';
@@ -13,8 +13,8 @@ import type { Board, ElementRef, Note, Page, PageSource, Spot } from '../schema'
 
 function buildFrameHtml(source: PageSource): string {
   const csp = source.allowExternal
-    ? "default-src 'none'; style-src 'unsafe-inline' https:; img-src data: https:; font-src data: https:"
-    : "default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src data:";
+    ? "default-src 'none'; style-src 'unsafe-inline' https:; img-src data: https:; font-src data: https:; media-src data: https:; connect-src 'none'"
+    : "default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src data:; media-src data:; connect-src 'none'";
   // CSPメタは先頭でも動くが、#uic-previewは既存の<style>と同じ詳細度のとき「後勝ち」させたいので</head>直前に置く
   const meta = `<meta http-equiv="Content-Security-Policy" content="${csp}">`;
   const overrides = `<style id="uic-preview"></style><style id="uic-hover"></style><style id="uic-audit-hover"></style>`;
@@ -29,7 +29,7 @@ export function HtmlBoard({ board, page }: { board: Board; page: Page }) {
   const source = page.source!;
   const [containerRef, boxSize] = useBoxSize<HTMLDivElement>();
   const iframeRef = useRef<HTMLIFrameElement>(null);
-  const [frameHtml] = useState(() => buildFrameHtml(source));
+  const frameHtml = useMemo(() => buildFrameHtml(source), [source.html, source.allowExternal]);
   const showingBefore = spaceHeld.value || lens.value === 'before';
   const handlePickRef = useRef<(el: Element) => void>(() => {});
   const pickerCleanupRef = useRef<(() => void) | null>(null);
@@ -77,6 +77,17 @@ export function HtmlBoard({ board, page }: { board: Board; page: Page }) {
     const label = text ? text.slice(0, 20) : el.tagName.toLowerCase();
     const element: ElementRef = { selector, tag: el.tagName.toLowerCase(), text, computed };
     return { id: crypto.randomUUID(), pageId: page.id, n, label, rect, keep: false, notes: [], element };
+  }
+
+  function enableExternalResources() {
+    updateBoard((b) => ({
+      ...b,
+      pages: b.pages.map((p) => (
+        p.id === page.id && p.source
+          ? { ...p, source: { ...p.source, allowExternal: true } }
+          : p
+      )),
+    }));
   }
 
   // R1-c: 「ルールで校正する」。ルールの段から外れた要素を面積の大きい順に最大12個、箇所にして「ルール」ノートを付ける
@@ -152,6 +163,29 @@ export function HtmlBoard({ board, page }: { board: Board; page: Page }) {
 
   return (
     <div class="board-surface html-board-surface" ref={containerRef} style={{ aspectRatio: `${source.width} / ${source.height}` }}>
+      {source.origin && !source.allowExternal && (
+        <div
+          role="status"
+          style={{
+            position: 'absolute',
+            left: '8px',
+            top: '8px',
+            zIndex: 7,
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            maxWidth: 'calc(100% - 110px)',
+            padding: '6px 8px',
+            background: 'rgba(255, 254, 249, .96)',
+            border: '1px solid var(--line)',
+            fontSize: '10px',
+            lineHeight: 1.4,
+          }}
+        >
+          <span>元サイトのCSS・画像・フォントを停止中</span>
+          <button class="btn-sm" onClick={enableExternalResources}>許可して再描画</button>
+        </div>
+      )}
       <iframe
         ref={iframeRef}
         class="html-frame"

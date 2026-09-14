@@ -36,7 +36,7 @@ export function Empty({ dragOver, onOpenHtmlIntake }: { dragOver: boolean; onOpe
   const templates = library.value.templates;
 
   return (
-    <div class="empty-screen lab-home">
+    <div class="lab-home">
       <header class="lab-home-head">
         <div class="empty-hero lab-home-brand">
           <span class="lab-home-mark-plate">
@@ -65,7 +65,7 @@ export function Empty({ dragOver, onOpenHtmlIntake }: { dragOver: boolean; onOpe
           <span class="lab-module-state">READY</span>
         </div>
 
-        <div class="empty-intake lab-intake-grid">
+        <div class="lab-intake-grid">
           <label class={`empty-dropzone lab-dropzone${dragOver ? ' is-drag-over' : ''}`}>
             <span class="lab-dropzone-cross" aria-hidden="true">＋</span>
             <p class="empty-dropzone-title">{dragOver ? 'ここに落とす' : 'スクリーンショットをここにドロップ'}</p>
