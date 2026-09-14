@@ -243,7 +243,7 @@
     gap: 5px;
   }
 
-  .lab-bench-readouts span:nth-child(2) {
+  .lab-bench-readouts > span:nth-child(2) {
     display: none;
   }
 
@@ -302,7 +302,7 @@
     font-size: 8px;
   }
 
-  .lab-bench-readouts span:first-child {
+  .lab-bench-readouts > span:first-child {
     display: none;
   }
 
