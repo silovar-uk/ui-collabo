@@ -1,13 +1,18 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { handleHtml } from '../lib/intake';
+import { isUiCollaboCapture } from '../lib/html';
 import { BOOKMARKLET_URL } from '../bookmarklet';
 
 export function HtmlIntakeDialog({ onClose }: { onClose: () => void }) {
   const [text, setText] = useState('');
   const [origin, setOrigin] = useState('');
   const [allowExternal, setAllowExternal] = useState(false);
+  const [externalChoiceTouched, setExternalChoiceTouched] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const modalRef = useRef<HTMLDivElement>(null);
+
+  const captureDetected = !!text.trim() && isUiCollaboCapture(text);
+  const effectiveAllowExternal = externalChoiceTouched ? allowExternal : captureDetected;
 
   useEffect(() => {
     const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -37,7 +42,7 @@ export function HtmlIntakeDialog({ onClose }: { onClose: () => void }) {
 
   async function submitText() {
     if (!text.trim()) return;
-    await handleHtml(text, { origin: origin.trim() || undefined, allowExternal });
+    await handleHtml(text, { origin: origin.trim() || undefined, allowExternal: effectiveAllowExternal });
     onClose();
   }
 
@@ -46,7 +51,8 @@ export function HtmlIntakeDialog({ onClose }: { onClose: () => void }) {
     const file = input.files?.[0];
     if (!file) return;
     const raw = await file.text();
-    await handleHtml(raw, { origin: origin.trim() || undefined, allowExternal });
+    const fileAllowExternal = externalChoiceTouched ? allowExternal : isUiCollaboCapture(raw);
+    await handleHtml(raw, { origin: origin.trim() || undefined, allowExternal: fileAllowExternal });
     input.value = '';
     onClose();
   }
@@ -61,7 +67,7 @@ export function HtmlIntakeDialog({ onClose }: { onClose: () => void }) {
         <div class="modal-body">
           <div class="field">
             <span class="field-label">ページを取り込む(おすすめ)</span>
-            <p class="muted">対象ページを開いてボタンを押すと、見た目そのままの内容がクリップボードに入ります。</p>
+            <p class="muted">対象ページを開いてボタンを押すと、見た目を再現しやすい形でHTMLとCSSをクリップボードへまとめます。</p>
             <a class="btn bookmarklet-link" href={BOOKMARKLET_URL}>
               ページを取り込む
             </a>
@@ -84,8 +90,14 @@ export function HtmlIntakeDialog({ onClose }: { onClose: () => void }) {
             />
           </label>
 
+          {captureDetected && (
+            <p class="html-intake-detected" role="status">
+              UI ColLaboの取り込みデータを検出しました。見た目の再現を優先し、元サイトのCSS・画像・フォントを読み込む設定を初期ONにしています。
+            </p>
+          )}
+
           <label class="field">
-            <span class="field-label">元URL(任意。ブックマークレット経由なら自動で埋まります)</span>
+            <span class="field-label">元URL(任意。ブックマークレット経由ならHTML内から自動取得します)</span>
             <input
               class="text-input"
               placeholder="https://..."
@@ -95,8 +107,15 @@ export function HtmlIntakeDialog({ onClose }: { onClose: () => void }) {
           </label>
 
           <label class="field-inline">
-            <input type="checkbox" checked={allowExternal} onChange={(e) => setAllowExternal((e.target as HTMLInputElement).checked)} />
-            <span>外部の画像・フォントを読み込む(元サイトへ通信します)</span>
+            <input
+              type="checkbox"
+              checked={effectiveAllowExternal}
+              onChange={(e) => {
+                setExternalChoiceTouched(true);
+                setAllowExternal((e.target as HTMLInputElement).checked);
+              }}
+            />
+            <span>元サイトのCSS・画像・フォントを読み込む(元サイトへ通信します)</span>
           </label>
 
           <div class="chip-row">
@@ -110,7 +129,7 @@ export function HtmlIntakeDialog({ onClose }: { onClose: () => void }) {
           </div>
 
           <p class="muted">
-            クロスオリジンのCSS(Webフォントなど)は読み出せません。canvasの描画内容や擬似要素の背景画像も持ち出せません。
+            scriptやiframeは取り込み時に除去します。クロスオリジン制約により一部CSS・Webフォント・canvas・擬似要素は元ページと完全一致しない場合があります。
           </p>
         </div>
       </div>
