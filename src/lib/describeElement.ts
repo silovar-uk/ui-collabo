@@ -1,5 +1,15 @@
 import type { ComputedKey } from '../schema';
 
+/** 連続する空白・改行を空白1つにまとめる。 */
+export function normalizeText(s: string): string {
+  return s.replace(/\s+/g, ' ').trim();
+}
+
+/** 箇所の表示名。名前が空なら「箇所n」にする。 */
+export function spotDisplayName(spot: { n: number; label: string }): string {
+  return normalizeText(spot.label) || `箇所${spot.n}`;
+}
+
 const LABEL: Partial<Record<ComputedKey, string>> = {
   'font-size': '文字',
   'font-weight': '太さ',

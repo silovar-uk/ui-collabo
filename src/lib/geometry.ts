@@ -80,6 +80,25 @@ export function ratioToPx(ratio: Rect, cr: ContainRect): Rect {
   };
 }
 
+export interface Size {
+  width: number;
+  height: number;
+}
+
+/** 「細かく指定」バーの置き場所。箇所の上に入ればその上、入らなければ下、どちらも無理なら箇所の内側の上端に置く。 */
+export function palettePosition(spotPx: Rect, surface: Size, bar: Size, gap = 6): { left: number; top: number } {
+  const maxLeft = Math.max(0, surface.width - bar.width);
+  const left = Math.min(Math.max(0, spotPx.x), maxLeft);
+
+  const above = spotPx.y - gap - bar.height;
+  const below = spotPx.y + spotPx.h + gap;
+  let top: number;
+  if (above >= 0) top = above;
+  else if (below + bar.height <= surface.height) top = below;
+  else top = Math.max(0, Math.min(spotPx.y, surface.height - bar.height));
+  return { left, top };
+}
+
 export function clamp01(v: number): number {
   return Math.min(1, Math.max(0, v));
 }

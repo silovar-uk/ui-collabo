@@ -4,6 +4,7 @@ import { containRect, clampRect, type FitResult } from '../lib/geometry';
 import { useBoxSize } from '../lib/useBoxSize';
 import { useBoardKeys } from '../lib/useBoardKeys';
 import { attachPicker, readComputed, uniqueSelector } from '../lib/domPick';
+import { normalizeText } from '../lib/describeElement';
 import { spotsToCss } from '../lib/htmlCss';
 import { collectElementRecords, findRuleDeviations } from '../lib/audit';
 import { SpotRect } from './SpotRect';
@@ -54,13 +55,24 @@ export function HtmlBoard({ board, page, fit }: { board: Board; page: Page; fit:
       const existing = findSpotBySelector(uniqueSelector(el));
       if (existing) {
         selectedSpotId.value = existing.id;
+        focusSpotRect(existing.id);
         return;
       }
       const spot = createSpotForElement(el, nextSpotNumber(board));
       updateBoard((b) => ({ ...b, spots: [...b.spots, spot] }));
       selectedSpotId.value = spot.id;
+      focusSpotRect(spot.id);
     };
   });
+
+  // iframe内の要素をクリックした直後はフォーカスがiframeに残り、Esc/DeleteがuseBoardKeysに届かない(B8)。
+  // 箇所枠へフォーカスを移すことで、親ドキュメントのキー操作を効かせる
+  function focusSpotRect(spotId: string): void {
+    requestAnimationFrame(() => {
+      const el = containerRef.current?.querySelector<HTMLElement>(`[data-spot-id="${spotId}"]`);
+      el?.focus({ preventScroll: true });
+    });
+  }
 
   function findSpotBySelector(selector: string): Spot | undefined {
     return board.spots.find((s) => s.pageId === page.id && s.element?.selector === selector);
@@ -76,7 +88,9 @@ export function HtmlBoard({ board, page, fit }: { board: Board; page: Page; fit:
       w: box.width / source.width,
       h: box.height / source.height,
     });
-    const text = (el.textContent ?? '').trim().slice(0, 40) || undefined;
+    const ariaLabel = el.getAttribute('aria-label');
+    const rawText = ariaLabel || (el as HTMLElement).innerText || el.textContent || '';
+    const text = normalizeText(rawText).slice(0, 40) || undefined;
     const label = text ? text.slice(0, 20) : el.tagName.toLowerCase();
     const element: ElementRef = { selector, tag: el.tagName.toLowerCase(), text, computed };
     return { id: crypto.randomUUID(), pageId: page.id, n, label, rect, keep: false, notes: [], element };

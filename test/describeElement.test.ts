@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { describeComputed } from '../src/lib/describeElement';
+import { describeComputed, normalizeText, spotDisplayName } from '../src/lib/describeElement';
 
 describe('S8: describeComputed', () => {
   it('会話語のラベルに変換する', () => {
@@ -16,5 +16,18 @@ describe('S8: describeComputed', () => {
       color: '#111111',
     });
     expect(lines).toEqual(['色 #111111']);
+  });
+});
+
+describe('フェーズB: normalizeText / spotDisplayName', () => {
+  it('連続する空白・改行を1つの空白にまとめる', () => {
+    expect(normalizeText('リンク集\n- スケッチ風のやつ')).toBe('リンク集 - スケッチ風のやつ');
+    expect(normalizeText('  見出し   です  ')).toBe('見出し です');
+  });
+
+  it('名前が空なら箇所nを返す', () => {
+    expect(spotDisplayName({ n: 3, label: '' })).toBe('箇所3');
+    expect(spotDisplayName({ n: 3, label: '  \n ' })).toBe('箇所3');
+    expect(spotDisplayName({ n: 3, label: 'ステータス表示' })).toBe('ステータス表示');
   });
 });

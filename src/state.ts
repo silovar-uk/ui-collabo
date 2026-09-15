@@ -234,6 +234,9 @@ export const hoverLine = signal<{ spotId: string; lineKey: string } | null>(null
 /** R1-b: 色の棚卸しでスウォッチにホバーしたときの、ボード上でのハイライト色。 */
 export const paletteHoverColor = signal<string | null>(null);
 
+/** 右パネルの「細かく指定する」にポインターを載せている間、ボード上のバーを強調する。 */
+export const paletteHint = signal(false);
+
 // --- R1-c: HTMLページのばらつき診断 ---
 /** 表示中のHTMLページから集めた要素記録(HtmlBoardが更新する)。 */
 export const htmlAuditRecords = signal<ElementRecord[] | null>(null);

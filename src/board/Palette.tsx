@@ -1,12 +1,11 @@
-import { useEffect, useRef, useState } from 'preact/hooks';
-import { colorPickRequest, deleteSpot, measureRequest, pickerOpen, requestOpenCategory, updateBoard } from '../state';
+import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
+import { colorPickRequest, measureRequest, paletteHint, pickerOpen, requestOpenCategory, updateBoard } from '../state';
 import * as notes from '../lib/notes';
 import { ruleRefOptions } from '../lib/ruleRefs';
 import { getSpotEditTarget } from '../lib/spotTarget';
-import { clampRect, ratioToPx, type ContainRect } from '../lib/geometry';
+import { clampRect, palettePosition, ratioToPx, type ContainRect } from '../lib/geometry';
 import { LADDER_TO_CSS, nearestStepIndex, parseNumber } from '../lib/htmlCss';
-import { describeComputed } from '../lib/describeElement';
-import { ALL_COMMANDS, searchCommands, type Command } from '../lib/commands';
+import type { Command } from '../lib/commands';
 import { COLOR_ROLES, FONT_MOODS, LADDER_ATTRS, LADDER_TABLE, TONE_CHIPS } from '../vocab';
 import { Ladder } from '../pickers/Ladder';
 import { ColorPicker } from '../pickers/ColorPicker';
@@ -15,14 +14,10 @@ import { MotionPicker } from '../pickers/MotionPicker';
 import type { Board, LadderAttr, Note, Spot } from '../schema';
 import type { PaletteCategory } from '../state';
 
-type Category = PaletteCategory | 'search' | null;
+type Category = PaletteCategory | null;
 
-function isTypingTarget(el: EventTarget | null): boolean {
-  const tag = (el as HTMLElement | null)?.tagName;
-  return tag === 'INPUT' || tag === 'TEXTAREA';
-}
-
-function CommandPreviewView({ command }: { command: Command }) {
+/** 検索結果の実物プレビュー。右パネルの「言葉で選ぶ」からも使う。 */
+export function CommandPreviewView({ command }: { command: Command }) {
   const preview = command.preview;
   if (!preview) return null;
   if (preview.kind === 'font') {
@@ -61,38 +56,21 @@ export function Palette({ board, spot, cr }: { board: Board; spot: Spot; cr: Con
   const [open, setOpen] = useState<Category>(null);
   const [ladderAdder, setLadderAdder] = useState<LadderAttr | 'menu' | null>(null);
   const [openColorIds, setOpenColorIds] = useState<Set<string>>(new Set());
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchIndex, setSearchIndex] = useState(0);
+  const [barSize, setBarSize] = useState({ width: 0, height: 0 });
   const barRef = useRef<HTMLDivElement>(null);
   const popRef = useRef<HTMLDivElement>(null);
-  const searchInputRef = useRef<HTMLInputElement>(null);
 
-  // R4: 箇所を選んだ状態で文字キーを打つ(または/)と、パレットに検索欄が開く
-  useEffect(() => {
-    function onKeyDown(e: KeyboardEvent) {
-      if (isTypingTarget(e.target) || open !== null) return;
-      if (e.key === '/' || (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey && /^[\p{L}\p{N}]$/u.test(e.key))) {
-        e.preventDefault();
-        setSearchQuery(e.key === '/' ? '' : e.key);
-        setSearchIndex(0);
-        setOpen('search');
-      }
-    }
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [open]);
-
-  useEffect(() => {
-    if (open === 'search') searchInputRef.current?.focus();
-  }, [open]);
+  useLayoutEffect(() => {
+    const bar = barRef.current;
+    if (!bar) return;
+    setBarSize({ width: bar.offsetWidth, height: bar.offsetHeight });
+  });
 
   useEffect(() => {
     pickerOpen.value = open !== null;
     if (open === null) {
       setLadderAdder(null);
       setOpenColorIds(new Set());
-      setSearchQuery('');
-      setSearchIndex(0);
     }
   }, [open]);
 
@@ -131,7 +109,11 @@ export function Palette({ board, spot, cr }: { board: Board; spot: Spot; cr: Con
   }, [open]);
 
   function toggle(cat: Category) {
-    setOpen((cur) => (cur === cat ? null : cat));
+    setOpen((cur) => {
+      const next = cur === cat ? null : cat;
+      if (next === 'ladder' && !hasLadder) setLadderAdder('menu');
+      return next;
+    });
   }
 
   function nudge(dx: number, dy: number) {
@@ -162,30 +144,16 @@ export function Palette({ board, spot, cr }: { board: Board; spot: Spot; cr: Con
   const hasLadder = LADDER_ATTRS.some((a) => spot.notes.some((n) => n.kind === 'ladder' && n.attr === a));
 
   const px = ratioToPx(spot.rect, cr);
-
-  const elementInfo = spot.element ? describeComputed(spot.element.computed) : [];
+  const surface = { width: cr.left * 2 + cr.width, height: cr.top * 2 + cr.height };
+  const pos = palettePosition(px, surface, barSize);
 
   return (
-    <div class="palette" style={{ left: px.x, top: px.y - 40 }}>
-      {spot.element && (
-        <div class="palette-caption">
-          {elementInfo.join('・')} <code class="element-selector-sm">{spot.element.selector}</code>
-        </div>
-      )}
-      <div class="palette-bar" ref={barRef}>
-        {spot.carried && (
-          <>
-            <button class={`palette-btn palette-btn-ok${spot.check === 'ok' ? ' has-value' : ''}`} onClick={() => updateBoard(notes.setSpotCheck(spot.id, 'ok'))} title="直った">
-              ○
-            </button>
-            <button class={`palette-btn palette-btn-ng${spot.check === 'ng' ? ' has-value' : ''}`} onClick={() => updateBoard(notes.setSpotCheck(spot.id, 'ng'))} title="まだ">
-              ×
-            </button>
-          </>
-        )}
+    <div class="palette" style={{ left: pos.left, top: pos.top }}>
+      <div class={`palette-bar${paletteHint.value ? ' is-hinted' : ''}`} ref={barRef}>
+        <span class="palette-label">細かく指定</span>
         {!spot.element && (
           <button class="palette-btn" onClick={() => toggle('position')} title="位置">
-            ⇕
+            位置
           </button>
         )}
         <button class={`palette-btn${colorNotes.length ? ' has-value' : ''}`} onClick={() => toggle('color')} title="色">
@@ -195,25 +163,19 @@ export function Palette({ board, spot, cr }: { board: Board; spot: Spot; cr: Con
           文字
         </button>
         <button class={`palette-btn${hasLadder ? ' has-value' : ''}`} onClick={() => toggle('ladder')} title="大きさ・余白・形">
-          形
+          大きさ・余白・形
         </button>
         <button class={`palette-btn${motionNote ? ' has-value' : ''}`} onClick={() => toggle('motion')} title="動き">
-          動
+          動き
         </button>
         <button class={`palette-btn${textNote ? ' has-value' : ''}`} onClick={() => toggle('text')} title="ひとこと">
-          ✎
+          ひとこと
         </button>
         {ruleOptions.length > 0 && (
-          <button class={`palette-btn${ruleNotes.length ? ' has-value' : ''}`} onClick={() => toggle('rule')} title="ルールに合わせる">
-            R
+          <button class={`palette-btn${ruleNotes.length ? ' has-value' : ''}`} onClick={() => toggle('rule')} title="ルール">
+            ルール
           </button>
         )}
-        <button class={`palette-btn${spot.keep ? ' has-value' : ''}`} onClick={() => updateBoard(notes.setKeep(spot.id, !spot.keep))} title="残す(変えない)">
-          残
-        </button>
-        <button class="palette-btn palette-btn-danger" onClick={() => deleteSpot(spot.id)} title="この箇所を削除">
-          ×
-        </button>
       </div>
 
       <div class="palette-pop" popover="auto" ref={popRef}>
@@ -430,54 +392,6 @@ export function Palette({ board, spot, cr }: { board: Board; spot: Spot; cr: Con
           </div>
         )}
 
-        {open === 'search' &&
-          (() => {
-            const results = searchCommands(ALL_COMMANDS, searchQuery).slice(0, 20);
-            const idx = Math.min(searchIndex, Math.max(0, results.length - 1));
-            function applyAt(i: number) {
-              const cmd = results[i];
-              if (!cmd) return;
-              updateBoard((b) => cmd.apply(b, spot));
-              setOpen(null);
-            }
-            return (
-              <div class="field command-search">
-                <input
-                  ref={searchInputRef}
-                  class="text-input"
-                  placeholder="言葉で探す(例: ちいさ、ふわ)"
-                  value={searchQuery}
-                  onInput={(e) => {
-                    setSearchQuery((e.target as HTMLInputElement).value);
-                    setSearchIndex(0);
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'ArrowDown') {
-                      e.preventDefault();
-                      setSearchIndex((i) => Math.min(results.length - 1, i + 1));
-                    } else if (e.key === 'ArrowUp') {
-                      e.preventDefault();
-                      setSearchIndex((i) => Math.max(0, i - 1));
-                    } else if (e.key === 'Enter') {
-                      e.preventDefault();
-                      applyAt(idx);
-                    }
-                  }}
-                />
-                <div class="command-list">
-                  {results.map((cmd, i) => (
-                    <button key={cmd.id} class={`command-item${i === idx ? ' is-active' : ''}`} onClick={() => applyAt(i)}>
-                      <span class="command-preview">
-                        <CommandPreviewView command={cmd} />
-                      </span>
-                      <span class="command-label">{cmd.label}</span>
-                    </button>
-                  ))}
-                  {searchQuery && results.length === 0 && <p class="muted">見つかりませんでした</p>}
-                </div>
-              </div>
-            );
-          })()}
       </div>
     </div>
   );
