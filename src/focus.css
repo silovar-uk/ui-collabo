@@ -248,6 +248,7 @@
   }
 
   .lab-bench-surface {
+    flex: none;
     min-height: 0;
     padding: 18px 10px 30px;
   }

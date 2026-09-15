@@ -1,4 +1,4 @@
-import type { Format, Rect } from '../schema';
+import type { Board, Format, Page, Rect } from '../schema';
 
 /** 白紙ページの見た目上のアスペクト比を決める仮の寸法(実データには保存しない)。 */
 export function nominalCanvasSize(format: Format): { width: number; height: number } {
@@ -7,6 +7,39 @@ export function nominalCanvasSize(format: Format): { width: number; height: numb
   }
   if (format.kind === 'web') return { width: 1280, height: 1600 };
   return { width: 1280, height: 800 };
+}
+
+/** ページの基準寸法。HTMLはsource、画像はimage、白紙はnominalCanvasSizeを返す。 */
+export function pageCanvasSize(board: Board, page: Page): { width: number; height: number } {
+  if (page.source) return { width: page.source.width, height: page.source.height };
+  if (page.image) return { width: page.image.width, height: page.image.height };
+  return nominalCanvasSize(board.format);
+}
+
+export type FitMode = 'whole' | 'width';
+
+export interface FitResult {
+  mode: FitMode;
+  autoMode: FitMode;
+  scale: number;
+  width: number;
+  height: number;
+}
+
+// ponytail: 全体/幅の自動切替のしきい値。0.5は目安、実機で不自然なら調整してdocs/DECISIONS.mdに理由を書く
+const WHOLE_RATIO_THRESHOLD = 0.5;
+
+/** 作業面の内側(areaW×areaH)にページ(pageW×pageH)をどう収めるか決める。 */
+export function fitBoard(areaW: number, areaH: number, pageW: number, pageH: number, preferred: FitMode | null): FitResult {
+  if (areaW <= 0 || pageW <= 0 || pageH <= 0) {
+    return { mode: 'width', autoMode: 'width', scale: 0, width: 0, height: 0 };
+  }
+  const wide = Math.min(areaW / pageW, 1);
+  const whole = areaH > 0 ? Math.min(areaW / pageW, areaH / pageH) : 0;
+  const autoMode: FitMode = areaH > 0 && whole / wide >= WHOLE_RATIO_THRESHOLD ? 'whole' : 'width';
+  const mode = preferred ?? autoMode;
+  const scale = mode === 'whole' ? whole : wide;
+  return { mode, autoMode, scale, width: pageW * scale, height: pageH * scale };
 }
 
 export interface ContainRect {

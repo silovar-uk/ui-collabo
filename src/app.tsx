@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'preact/hooks';
-import { activePageId, currentBoard, currentBoardId, ready, saveStatus, selectedSpotId, spaceHeld } from './state';
+import { activePageId, benchFitPreference, currentBoard, currentBoardId, ready, saveStatus, selectedSpotId, spaceHeld } from './state';
 import { extractImageFiles } from './lib/image';
 import { handleFiles, handleHtml } from './lib/intake';
 import { hasSpecifiedContent } from './export';
 import { deriveWorkflowState, workflowPhaseIndex } from './lib/workflow';
+import { fitBoard, pageCanvasSize } from './lib/geometry';
+import { useBoxSize } from './lib/useBoxSize';
 import { Board } from './board/Board';
 import { HtmlBoard } from './board/HtmlBoard';
 import { Empty } from './panels/Empty';
@@ -43,6 +45,15 @@ export function App() {
   const [drawer, setDrawer] = useState<DrawerKind>(null);
   const [dragOver, setDragOver] = useState(false);
   const [htmlDialogOpen, setHtmlDialogOpen] = useState(false);
+  const [isNarrowBench, setIsNarrowBench] = useState(() => window.matchMedia('(max-width: 920px)').matches);
+  const [benchSurfaceRef, benchSurfaceSize] = useBoxSize<HTMLDivElement>();
+
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 920px)');
+    const onChange = () => setIsNarrowBench(mq.matches);
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
 
   useEffect(() => {
     function onPaste(e: ClipboardEvent) {
@@ -105,6 +116,14 @@ export function App() {
     : page?.image
       ? 'ドラッグして気になる箇所を囲う'
       : '作業面で気になる箇所を指定する';
+  const canvasSize = board && page ? pageCanvasSize(board, page) : { width: 0, height: 0 };
+  const fit = fitBoard(
+    benchSurfaceSize.width,
+    benchSurfaceSize.height,
+    canvasSize.width,
+    canvasSize.height,
+    isNarrowBench ? 'width' : benchFitPreference.value,
+  );
 
   return (
     <div
@@ -227,9 +246,23 @@ export function App() {
                 <PagePager board={board} currentPageId={activePageId.value} />
               </div>
               <span class="lab-bench-hint">{benchHint}</span>
+              {!isNarrowBench && (
+                <div class="lab-bench-fit-toggle" role="group" aria-label="表示">
+                  <button
+                    class={`btn-sm${fit.mode === 'whole' ? ' is-active' : ''}`}
+                    aria-pressed={fit.mode === 'whole'}
+                    onClick={() => (benchFitPreference.value = 'whole')}
+                  >全体</button>
+                  <button
+                    class={`btn-sm${fit.mode === 'width' ? ' is-active' : ''}`}
+                    aria-pressed={fit.mode === 'width'}
+                    onClick={() => (benchFitPreference.value = 'width')}
+                  >幅</button>
+                </div>
+              )}
             </div>
-            <div class="lab-bench-surface">
-              {page?.source ? <HtmlBoard key={page.id} board={board} page={page} /> : <Board />}
+            <div class="lab-bench-surface" ref={benchSurfaceRef}>
+              {page?.source ? <HtmlBoard key={page.id} board={board} page={page} fit={fit} /> : <Board fit={fit} />}
             </div>
           </section>
 

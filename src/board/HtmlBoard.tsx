@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef } from 'preact/hooks';
 import { auditHoverSelectors, auditRuleCheckRequest, htmlAuditRecords, lens, nextSpotNumber, selectedSpotId, spaceHeld, updateBoard } from '../state';
-import { containRect, clampRect } from '../lib/geometry';
+import { containRect, clampRect, type FitResult } from '../lib/geometry';
 import { useBoxSize } from '../lib/useBoxSize';
 import { useBoardKeys } from '../lib/useBoardKeys';
 import { attachPicker, readComputed, uniqueSelector } from '../lib/domPick';
@@ -9,7 +9,10 @@ import { collectElementRecords, findRuleDeviations } from '../lib/audit';
 import { SpotRect } from './SpotRect';
 import { LensToggle } from './LensToggle';
 import { Palette } from './Palette';
-import type { Board, ElementRef, Note, Page, PageSource, Spot } from '../schema';
+import type { Board, ElementRef, Note, Page, PageSource, Rect, Spot } from '../schema';
+
+// ponytail: 枠の再同期をこの差以上のときだけ行う。0.002は目安、実機で不自然なら調整する
+const RECT_RESYNC_THRESHOLD = 0.002;
 
 function buildFrameHtml(source: PageSource): string {
   const csp = source.allowExternal
@@ -25,7 +28,7 @@ function buildFrameHtml(source: PageSource): string {
   return `<head>${meta}${overrides}</head>${source.html}`;
 }
 
-export function HtmlBoard({ board, page }: { board: Board; page: Page }) {
+export function HtmlBoard({ board, page, fit }: { board: Board; page: Page; fit: FitResult }) {
   const source = page.source!;
   const [containerRef, boxSize] = useBoxSize<HTMLDivElement>();
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -119,21 +122,45 @@ export function HtmlBoard({ board, page }: { board: Board; page: Page }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [auditRuleCheckRequest.value]);
 
-  function onFrameLoad() {
+  async function onFrameLoad() {
     const iframe = iframeRef.current;
     const doc = iframe?.contentDocument;
     if (!iframe || !doc) return;
-    // scrollHeightはiframe自身の高さを下限として返すため、計測中だけ0に潰して実際の中身の高さを取る
+    await doc.fonts?.ready?.catch(() => {});
+
+    // scrollHeightはiframe自身の高さを下限として返すため、計測中だけ高さを変えて中身の実高さを取る。
+    // overflow指定のないアプリ画面(100dvh)は高さ0で潰れて記録されるため、viewport高さでの計測も併せて大きい方を採る
     const prevHeight = iframe.style.height;
     iframe.style.height = '0px';
-    const height = doc.documentElement.scrollHeight;
-    iframe.style.height = prevHeight;
-    if (height > 0 && Math.abs(height - source.height) > 1) {
+    const height0 = doc.documentElement.scrollHeight;
+    const viewportHeight = source.capture?.viewportHeight ?? 800;
+    iframe.style.height = `${viewportHeight}px`;
+    const heightAtViewport = doc.body?.scrollHeight ?? 0;
+    const height = Math.max(height0, heightAtViewport);
+    iframe.style.height = `${height}px`;
+
+    const rectUpdates = new Map<string, Rect>();
+    for (const spot of board.spots) {
+      if (spot.pageId !== page.id || !spot.element) continue;
+      const el = doc.querySelector(spot.element.selector);
+      if (!el) continue;
+      const box = el.getBoundingClientRect();
+      const rect = clampRect({ x: box.x / source.width, y: box.y / height, w: box.width / source.width, h: box.height / height });
+      const diff = Math.abs(rect.x - spot.rect.x) + Math.abs(rect.y - spot.rect.y) + Math.abs(rect.w - spot.rect.w) + Math.abs(rect.h - spot.rect.h);
+      if (diff > RECT_RESYNC_THRESHOLD) rectUpdates.set(spot.id, rect);
+    }
+
+    const heightChanged = height > 0 && Math.abs(height - source.height) > 1;
+    if (heightChanged || rectUpdates.size > 0) {
       updateBoard((b) => ({
         ...b,
         pages: b.pages.map((p) => (p.id === page.id && p.source ? { ...p, source: { ...p.source, height } } : p)),
+        spots: b.spots.map((s) => (rectUpdates.has(s.id) ? { ...s, rect: rectUpdates.get(s.id)! } : s)),
       }));
+    } else {
+      iframe.style.height = prevHeight;
     }
+
     pickerCleanupRef.current?.();
     pickerCleanupRef.current = attachPicker(doc, (el) => handlePickRef.current(el));
     htmlAuditRecords.value = collectElementRecords(doc);
@@ -162,7 +189,7 @@ export function HtmlBoard({ board, page }: { board: Board; page: Page }) {
   const scale = cr.width / source.width;
 
   return (
-    <div class="board-surface html-board-surface" ref={containerRef} style={{ aspectRatio: `${source.width} / ${source.height}` }}>
+    <div class="board-surface html-board-surface" ref={containerRef} style={{ width: fit.width, height: fit.height }}>
       {source.origin && !source.allowExternal && (
         <div
           role="status"

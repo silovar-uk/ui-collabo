@@ -3,6 +3,7 @@ import { kvGet, kvSet } from './lib/storage';
 import { emptyLibrary, newBoard, type Board, type Format, type LadderAttr, type Library, type RuleSet, type Rules, type Spot } from './schema';
 import { parseLibraryJson, repairStoredLibrary, validateLibrary } from './lib/libraryValidation';
 import type { ElementRecord } from './lib/audit';
+import type { FitMode } from './lib/geometry';
 
 const LIBRARY_KEY = 'library';
 const LAST_BOARD_KEY = 'lastBoardId';
@@ -55,6 +56,13 @@ effect(() => {
   if (!board.pages.some((p) => p.id === activePageId.value)) {
     activePageId.value = board.pages[0]?.id ?? null;
   }
+});
+
+/** 作業面の表示(全体/幅)の手動選択。ページ切替で自動判定へ戻す(保存しない)。 */
+export const benchFitPreference = signal<FitMode | null>(null);
+effect(() => {
+  void activePageId.value;
+  benchFitPreference.value = null;
 });
 
 export async function init(): Promise<void> {
