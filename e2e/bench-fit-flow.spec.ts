@@ -37,6 +37,17 @@ test.describe('フェーズA: 作業面の全体表示', () => {
     await expect.poll(() => column.evaluate((el) => el.scrollHeight <= el.clientHeight + 1)).toBe(true);
   });
 
+  for (const viewport of [{ width: 1440, height: 860 }, { width: 1920, height: 950 }]) {
+    test(`${viewport.width}x${viewport.height}でも同じページに縦スクロールが出ない`, async ({ page }) => {
+      await page.setViewportSize(viewport);
+      await seedBoard(page, memoBoard());
+      const iframe = page.locator('iframe.html-frame');
+      await expect.poll(() => iframe.evaluate((el) => (el as HTMLIFrameElement).style.height)).toBe('800px');
+      const column = page.locator('.board-column.lab-bench');
+      await expect.poll(() => column.evaluate((el) => el.scrollHeight <= el.clientHeight + 1)).toBe(true);
+    });
+  }
+
   test('縦長のページは幅合わせでスクロールし、「全体」を押すとスクロールなしになる', async ({ page }) => {
     await page.setViewportSize({ width: 1366, height: 640 });
     const tallHtml = '<!doctype html><html><body style="margin:0"><div style="height:3600px"></div></body></html>';
@@ -46,6 +57,14 @@ test.describe('フェーズA: 作業面の全体表示', () => {
     await expect.poll(() => column.evaluate((el) => el.scrollHeight > el.clientHeight + 1)).toBe(true);
     await page.getByRole('button', { name: '全体', exact: true }).click();
     await expect.poll(() => column.evaluate((el) => el.scrollHeight <= el.clientHeight + 1)).toBe(true);
+  });
+
+  test('390px幅では常に幅合わせになり、横スクロールが出ない', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await seedBoard(page, memoBoard());
+    await expect(page.locator('.lab-bench-fit-toggle')).toBeHidden();
+    const sizes = await page.evaluate(() => ({ scrollWidth: document.documentElement.scrollWidth, clientWidth: document.documentElement.clientWidth }));
+    expect(sizes.scrollWidth).toBeLessThanOrEqual(sizes.clientWidth + 1);
   });
 });
 
