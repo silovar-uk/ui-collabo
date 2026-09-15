@@ -269,3 +269,67 @@
 - README・SPEC.md・UI-LANGUAGE.mdは、PLAN-SHUHARI.mdの実装内容(H1〜H6・R1〜R4・S1〜S11)を
   反映するよう更新した。UI-LANGUAGE.mdは過去の研究セッションの分析記録という性質上、本文を
   書き換えるのではなく第9節を追加して決着を記録する形にした(第4節の原則3行のみ直接更新)
+
+## 作業面の全体表示と右パネルの役割分担(2026-09-15)
+
+PLAN-FIT-FLOW.mdに基づく実装。決定事項(Q1〜Q3)は以下のとおり反映した。
+
+- Q1(箇所を選んだ後の操作の置き場): 右パネル(選択中の箇所・指示の一覧)とボード上の朱の
+  バーの両方を残し、役割を明示的に分けた。右パネルは「言葉で選ぶ・入った指示を確かめる・
+  箇所を管理する」場所、バーは「細かく指定する」道具とした。バーからは説明行・残す・削除・
+  照合の○×・文字キー検索を外し、`SelectedSpot.tsx`(旧`IntentDock.tsx`)へ移した
+- Q2(指示一覧の書き方): `export.ts`の`Line`に`part?: 'spot' | 'element' | 'position' | 'note'`
+  を足し、`Sheet.tsx`はAI向けの`###`見出しやセレクタを出さず、`part`が`note`/`position`の行だけを
+  人が読む短文で見せる。AIに渡す文面自体(`boardToMarkdown`)は変えていない(金型テスト対象)
+- Q3(縦長ページの見せ方): `fitBoard(areaW, areaH, pageW, pageH, preferred)`(`src/lib/geometry.ts`)
+  を新設し、`whole/wide`の比が0.5以上なら全体表示、それ未満なら幅合わせを自動選択する。
+  しきい値0.5は目安のため定数化し(`WHOLE_RATIO_THRESHOLD`)、ponytailコメントを添えた。
+  手動切替(`benchFitPreference`)はページ切替でnullに戻し、保存しない
+- HTML取り込みの高さ実測(`HtmlBoard.tsx`の`onFrameLoad`)は、`overflow`指定のない`100dvh`の
+  アプリ画面で高さが0に潰れて記録される問題(B/A5)に対し、高さ0での計測とviewport高さ
+  (`source.capture?.viewportHeight ?? 800`)での計測の大きい方を採るようにした。高さが変わった
+  ときは、`element`付き箇所の枠を`getBoundingClientRect()`で実測し直し、差が0.002を超えた
+  箇所だけ`updateBoard`1回で更新する(枠の再同期の閾値も定数化: `RECT_RESYNC_THRESHOLD`)
+- ノート由来の行のキーを、位置ベースの`${spotId}:${index}`から`note:${noteId}`(`noteLineKey`)へ
+  変えた。追加された行も光らせつつ、初回表示・ボード切り替えの直後は光らせないため、
+  `Sheet`は`prevBoardIdRef`で「このboard.idの一覧をまだ一度も出していないか」を別途持つ
+
+### 実装中に見つけた実害バグ2件(e2e検証で発覚)
+
+フェーズDのE2E(`e2e/bench-fit-flow.spec.ts`)を書いて実行したところ、フェーズA・Bのコードに
+実際に壊れていた箇所が2つ見つかった。単体テスト・型チェック・ビルドはすべて通っていたが、
+実ブラウザでの操作(要素を選ぶ、作業面のサイズを測る)までは検出できていなかった。
+
+1. `src/lib/useBoxSize.ts`: `useRef` + `useEffect(() => {...}, [])`の組み合わせは、ref先の
+   要素が**コンポーネントの初回コミット時にまだ存在しない**場合(「ボードを開いた後にだけ
+   描画される作業面」がこれに当たる)、`ref.current`がnullのまま副作用が1度だけ実行されて
+   終わり、その後要素が実際に現れても`ResizeObserver`が一生付かない。結果、作業面・ボードの
+   実寸が常に0×0のまま(`fitBoard`の入力が0のため`{width:0,height:0}`)になっていた。
+   `Board.tsx`・`HtmlBoard.tsx`自身の内側のrefは、これらのコンポーネント自体がボード表示時に
+   新規マウントされるため問題が表面化せず、App.tsx側で新設した`benchSurfaceRef`だけが影響を
+   受けていた。コールバックref(要素の着脱のたびに呼ばれる関数)に変え、`.current`での
+   参照も維持できるよう`(node) => void`に`current`プロパティを持たせた型(`BoxRef<T>`)にした
+2. `src/board/Palette.tsx`: バーの寸法を測る`useLayoutEffect`に依存配列が無く、`setBarSize`が
+   `{width, height}`という新しいオブジェクトを毎回返すため、値が変わっていなくても
+   Preactが再レンダーと判断し、`useLayoutEffect`が自分自身を無限に呼び直していた
+   (要素を選ぶとタブ全体が無反応になる)。前回値と同じなら同じ参照を返すよう直した
+   (`setBarSize((prev) => prev.width === width && prev.height === height ? prev : {...})`)。
+
+いずれも黙って直さず、このドキュメントに残す。単体テストは「純関数の入出力」しか
+見ておらず、この種の「実DOMのマウント順序」「Reactの再レンダーの停止条件」に起因する
+不具合はE2Eでしか捕まらないことを確認できたため、今後もこの種の変更(ref・useEffectの
+依存配列まわり)は`npx playwright test`まで通してから完了とする。
+
+### Claude Codeの「Browserペイン」プレビューでの制約
+
+このセッションの実機確認(`preview_start` + `mcp__Claude_Browser__*`)では、開いたタブで
+`requestAnimationFrame`と`ResizeObserver`のコールバックが一度も発火しないことを確認した
+(素のJSで`requestAnimationFrame`を5回連鎖させても発火数0のまま、`setTimeout`は正常に動く)。
+このためHTML取り込みボードのiframeは`transform: scale(0)`のまま(実寸0で計測される)になり、
+上記1のバグ修正後も、この画面でのHTML箇所の見た目は確認できなかった。一方、`npx playwright
+test`が起動する実Chromiumでは同じResizeObserverが正常に発火し、e2eは全件通過している。
+このため、フェーズA〜Cの見た目確認は実Chromium(Playwright)で行い、1366×640の
+選択前/選択後のスクリーンショットは今回のBrowserペインからは取得できなかった。次回以降、
+このペインでHTML/画像ボードの実サイズ依存の見た目を確認する必要がある場合は、この制約を
+前提に(ResizeObserver/rAFに依存しない確認方法を選ぶか、ユーザーの実ブラウザでの確認を
+別途依頼するか)判断すること。
