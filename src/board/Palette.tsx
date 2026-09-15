@@ -63,7 +63,10 @@ export function Palette({ board, spot, cr }: { board: Board; spot: Spot; cr: Con
   useLayoutEffect(() => {
     const bar = barRef.current;
     if (!bar) return;
-    setBarSize({ width: bar.offsetWidth, height: bar.offsetHeight });
+    const width = bar.offsetWidth;
+    const height = bar.offsetHeight;
+    // 値が変わらないときはprevをそのまま返し、無駄な再レンダー(depsなしのuseLayoutEffectが自分自身を再度起こすループ)を避ける
+    setBarSize((prev) => (prev.width === width && prev.height === height ? prev : { width, height }));
   });
 
   useEffect(() => {
