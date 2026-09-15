@@ -3,14 +3,14 @@ import { activePageId, benchFitPreference, currentBoard, currentBoardId, ready, 
 import { extractImageFiles } from './lib/image';
 import { handleFiles, handleHtml } from './lib/intake';
 import { hasSpecifiedContent } from './export';
-import { deriveWorkflowState, workflowPhaseIndex } from './lib/workflow';
+import { deriveWorkflowState, workflowPhaseIndex, type WorkflowState } from './lib/workflow';
 import { fitBoard, pageCanvasSize } from './lib/geometry';
 import { useBoxSize } from './lib/useBoxSize';
 import { Board } from './board/Board';
 import { HtmlBoard } from './board/HtmlBoard';
 import { Empty } from './panels/Empty';
 import { Sheet } from './panels/Sheet';
-import { IntentDock } from './panels/IntentDock';
+import { SelectedSpot } from './panels/SelectedSpot';
 import { LeaderLine } from './panels/LeaderLine';
 import { PagePager } from './panels/PagePager';
 import { ExportDrawer } from './panels/ExportDrawer';
@@ -39,6 +39,19 @@ function formatLabel(board: BoardModel): string {
   if (board.format.kind === 'web') return 'WEB';
   if (board.format.kind === 'slide') return `SLIDE ${board.format.aspect}`;
   return 'FREE';
+}
+
+/** 4.2: 右パネル上部「次にやること」の文言。選択中は出さない。 */
+function nextStepText(workflow: WorkflowState, page: BoardModel['pages'][number] | null, activeCount: number, specifiedCount: number): string | null {
+  if (workflow === 'mark') {
+    if (page?.source) return '次にやること: 画面の気になる要素をクリックして選びます';
+    if (page?.image) return '次にやること: 画像の気になる所をドラッグで囲みます';
+    return '次にやること: 作業面をドラッグして箇所を作ります';
+  }
+  if (workflow === 'define') return `次にやること: 箇所を選んで「こうしたい」を入れます(まだ指示のない箇所 ${activeCount - specifiedCount}件)`;
+  if (workflow === 'handoff') return `次にやること: 指示がそろったら「AIに渡す」を押します(指示 ${specifiedCount}件)`;
+  if (workflow === 'verify') return '次にやること: AIが直した画像を貼って、各箇所を○/×で確かめます';
+  return null;
 }
 
 export function App() {
@@ -192,7 +205,9 @@ export function App() {
               <li class={`${index === phase ? 'is-current' : ''}${index < phase ? ' is-complete' : ''}`} key={item.code}>
                 <span class="lab-phase-code">{item.code}</span>
                 <span class="lab-phase-en">{item.en}</span>
-                <span class="lab-phase-ja">{workflow === 'proofed' && index === 4 ? '校了' : item.ja}</span>
+                <span class="lab-phase-ja">
+                  {workflow === 'proofed' && index === 4 ? '校了' : index === 1 ? (page?.source ? '指す' : '囲う') : item.ja}
+                </span>
               </li>
             ))}
           </ol>
@@ -277,8 +292,12 @@ export function App() {
                 {keptCount > 0 && <span>{keptCount} 固定</span>}
               </div>
             </div>
-            <IntentDock board={board} />
-            <Sheet board={board} />
+            {!selectedSpotId.value && (() => {
+              const text = nextStepText(workflow, page, activeSpots.length, specifiedCount);
+              return text ? <p class="lab-next-step">{text}</p> : null;
+            })()}
+            <SelectedSpot board={board} />
+            <Sheet board={board} specifiedCount={specifiedCount} onShowExport={() => setDrawer('export')} />
           </aside>
           <LeaderLine />
         </main>

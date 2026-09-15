@@ -583,6 +583,15 @@ body {
   justify-content: flex-end;
 }
 
+.lab-next-step {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 10px 16px;
+  color: var(--lab-subtle);
+  font-size: 11px;
+  border-bottom: 1px solid var(--lab-line);
+}
+
 .lab-panel-counts span {
   padding: 3px 6px;
   color: var(--lab-subtle);

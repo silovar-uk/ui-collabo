@@ -31,7 +31,7 @@ export interface Toast {
 }
 export const toast = signal<Toast | null>(null);
 let toastTimer: ReturnType<typeof setTimeout> | undefined;
-function showToast(message: string, onUndo?: () => void): void {
+export function showToast(message: string, onUndo?: () => void): void {
   if (toastTimer) clearTimeout(toastTimer);
   toast.value = { message, onUndo };
   toastTimer = setTimeout(() => {

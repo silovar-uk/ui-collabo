@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { boardToLines, hasSpecifiedContent, type Line } from '../export';
 import * as notes from '../lib/notes';
+import { spotDisplayName } from '../lib/describeElement';
 import { extractPalette, type PaletteColor } from '../lib/palette';
 import { createRoundBoard, isProofed } from '../lib/round';
 import { fileToImage } from '../lib/image';
@@ -28,6 +29,11 @@ import type { Board, Note, Page, Spot } from '../schema';
 
 function categoryForNote(note: Note): PaletteCategory {
   return note.kind === 'ladder' ? 'ladder' : note.kind;
+}
+
+/** ノート由来の行の安定キー。追加された行も検知できるよう、行の位置ではなくノートidにする(H3改)。 */
+export function noteLineKey(noteId: string): string {
+  return `note:${noteId}`;
 }
 
 const PALETTE_ROLES: { role: 'bg' | 'text' | 'accent' | 'sub'; label: string }[] = [
@@ -224,7 +230,7 @@ function downloadBlob(blob: Blob, filename: string): void {
 }
 
 /** H5/Product Contract: 必要資産を揃えてからChatGPTへ渡す。複数ページをsilentに1枚目へ潰さない。 */
-function ExportButton({ board }: { board: Board }) {
+function ExportButton({ board, specifiedCount, onShowExport }: { board: Board; specifiedCount: number; onShowExport: () => void }) {
   const [step, setStep] = useState<1 | 2>(1);
   const [exported, setExported] = useState(false);
   const [handoffMessage, setHandoffMessage] = useState<string | null>(null);
@@ -320,12 +326,16 @@ function ExportButton({ board }: { board: Board }) {
     }
   }
 
+  const disabled = step === 1 && specifiedCount === 0;
+
   return (
     <div class="sheet-export">
       {handoffMessage && <p class="muted">{handoffMessage}</p>}
-      <button class="btn sheet-export-btn" onClick={handleClick}>
-        {step === 2 ? '② ChatGPTで開く' : 'AIに渡す'}
+      <button class="btn sheet-export-btn" disabled={disabled} onClick={handleClick}>
+        {step === 2 ? '② ChatGPTで開く' : `AIに渡す(${specifiedCount}件)`}
       </button>
+      {disabled && <p class="muted">指示を1件以上入れると渡せます</p>}
+      <button class="btn-sm sheet-show-export" onClick={onShowExport}>渡す文面を見る</button>
       {exported && roundable && (
         <label class="btn-sm sheet-round-entry">
           {board.pages.length > 1 ? `AIが直した画像をp.1〜p.${board.pages.length}の順に選んで照合` : 'AIが直したら、直った画像を貼って照合'}
@@ -353,7 +363,7 @@ function BoardCard({ board }: { board: Board }) {
   return (
     <div class="sheet-card sheet-card-board">
       <label class="field">
-        <span class="field-label"># デザイン指示</span>
+        <span class="field-label">ボード名</span>
         <input
           class="text-input"
           value={board.title}
@@ -419,55 +429,25 @@ function BoardCard({ board }: { board: Board }) {
   );
 }
 
-interface SpotCardProps {
-  spot: Spot;
-  lines: Line[];
-  selected: boolean;
-  flashKeys: Set<string>;
+function selectSpotOnPage(spot: Spot): void {
+  if (activePageId.value !== spot.pageId) activePageId.value = spot.pageId;
+  selectedSpotId.value = spot.id;
 }
 
-function SpotCard({ spot, lines, selected, flashKeys }: SpotCardProps) {
-  function selectSpot() {
-    if (activePageId.value !== spot.pageId) activePageId.value = spot.pageId;
-    selectedSpotId.value = spot.id;
+/** 箇所1件分の「この箇所の指示」の行(note/position行のみ)。人が読む短文で見せ、SelectedSpotとSheetの両方で使う。 */
+export function SpotLines({ spot, lines, flashKeys }: { spot: Spot; lines: Line[]; flashKeys: Set<string> }) {
+  const rows = lines.filter((l) => l.part === 'note' || l.part === 'position');
+  function activate(category: PaletteCategory | null) {
+    selectSpotOnPage(spot);
+    if (category) requestOpenCategory.value = { spotId: spot.id, category };
   }
-
-  function open(category: PaletteCategory) {
-    selectSpot();
-    requestOpenCategory.value = { spotId: spot.id, category };
-  }
-
   return (
-    <div class={`sheet-card${selected ? ' is-selected' : ''}`}>
-      {spot.carried && (
-        <div class="sheet-card-check">
-          <button class={`btn-sm${spot.check === 'ok' ? ' is-active' : ''}`} onClick={() => updateBoard(notes.setSpotCheck(spot.id, 'ok'))}>
-            ○ 直った
-          </button>
-          <button class={`btn-sm${spot.check === 'ng' ? ' is-active' : ''}`} onClick={() => updateBoard(notes.setSpotCheck(spot.id, 'ng'))}>
-            × まだ
-          </button>
-        </div>
-      )}
-      {selected && (
-        <div class="sheet-card-head">
-          <input
-            class="text-input"
-            placeholder={`箇所${spot.n}`}
-            value={spot.label}
-            onInput={(e) => updateBoard(notes.setLabel(spot.id, (e.target as HTMLInputElement).value))}
-          />
-          <label class="field-inline">
-            <input type="checkbox" checked={spot.keep} onChange={(e) => updateBoard(notes.setKeep(spot.id, (e.target as HTMLInputElement).checked))} />
-            <span>残す(変えない)</span>
-          </label>
-        </div>
-      )}
-      {lines.map((line, i) => {
-        const key = lineKey(spot.id, i);
+    <>
+      {rows.map((line, i) => {
+        const key = line.noteId ? noteLineKey(line.noteId) : lineKey(spot.id, i);
         const clickCategory: PaletteCategory | null = line.noteId
           ? categoryForNote(spot.notes.find((n) => n.id === line.noteId)!)
-          : /^- (位置|大きさ)/.test(line.text.trim())
+          : line.part === 'position'
             ? 'position'
             : null;
         return (
@@ -483,12 +463,9 @@ function SpotCard({ spot, lines, selected, flashKeys }: SpotCardProps) {
               if (hoverSpotId.value === spot.id) hoverSpotId.value = null;
               if (hoverLine.value?.lineKey === key) hoverLine.value = null;
             }}
-            onClick={() => {
-              if (clickCategory) open(clickCategory);
-              else selectSpot();
-            }}
+            onClick={() => activate(clickCategory)}
           >
-            <span class="sheet-line-text">{line.text}</span>
+            <span class="sheet-line-text">{line.text.replace(/^\s*-\s*/, '')}</span>
             {line.noteId && (
               <span
                 class="sheet-line-remove"
@@ -505,24 +482,82 @@ function SpotCard({ spot, lines, selected, flashKeys }: SpotCardProps) {
           </button>
         );
       })}
+    </>
+  );
+}
+
+interface SpotCardProps {
+  spot: Spot;
+  lines: Line[];
+  selected: boolean;
+  flashKeys: Set<string>;
+}
+
+/** 選択中の箇所は、上のSelectedSpotに出ているため1行だけにする(同じ行が2か所に出ないように)。 */
+function SpotCard({ spot, lines, selected, flashKeys }: SpotCardProps) {
+  if (selected) {
+    return (
+      <div class="sheet-card is-selected sheet-card-selected-ref">
+        <span class="sheet-card-title">
+          <span class="spot-badge">{spot.n}</span>
+          {spotDisplayName(spot)}
+        </span>
+        <p class="muted">選択中(上に表示しています)</p>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      class="sheet-card"
+      onMouseEnter={() => (hoverSpotId.value = spot.id)}
+      onMouseLeave={() => { if (hoverSpotId.value === spot.id) hoverSpotId.value = null; }}
+    >
+      <button class="sheet-card-title" onClick={() => selectSpotOnPage(spot)}>
+        <span class="spot-badge">{spot.n}</span>
+        {spotDisplayName(spot)}
+        {spot.keep && <span class="muted">変えない</span>}
+      </button>
+      {spot.carried && (
+        <div class="sheet-card-check">
+          <button class={`btn-sm${spot.check === 'ok' ? ' is-active' : ''}`} onClick={() => updateBoard(notes.setSpotCheck(spot.id, 'ok'))}>
+            ○ 直った
+          </button>
+          <button class={`btn-sm${spot.check === 'ng' ? ' is-active' : ''}`} onClick={() => updateBoard(notes.setSpotCheck(spot.id, 'ng'))}>
+            × まだ
+          </button>
+        </div>
+      )}
+      <SpotLines spot={spot} lines={lines} flashKeys={flashKeys} />
     </div>
   );
 }
 
 function EmptySpotCard({ spot, selected }: { spot: Spot; selected: boolean }) {
-  function selectSpot() {
-    if (activePageId.value !== spot.pageId) activePageId.value = spot.pageId;
-    selectedSpotId.value = spot.id;
+  if (selected) {
+    return (
+      <div class="sheet-card is-selected sheet-card-selected-ref">
+        <span class="sheet-card-title">
+          <span class="spot-badge">{spot.n}</span>
+          {spotDisplayName(spot)}
+        </span>
+        <p class="muted">選択中(上に表示しています)</p>
+      </div>
+    );
   }
 
   return (
     <div
-      class={`sheet-card sheet-card-empty${selected ? ' is-selected' : ''}`}
+      class="sheet-card sheet-card-empty"
       onMouseEnter={() => (hoverSpotId.value = spot.id)}
       onMouseLeave={() => { if (hoverSpotId.value === spot.id) hoverSpotId.value = null; }}
-      onClick={selectSpot}
+      onClick={() => selectSpotOnPage(spot)}
     >
-      <div class="sheet-line">{spot.n} {spot.label || `箇所${spot.n}`}</div>
+      <span class="sheet-card-title">
+        <span class="spot-badge">{spot.n}</span>
+        {spotDisplayName(spot)}
+        <span class="muted">まだ指示なし</span>
+      </span>
       <p class="muted">まだ「こうしたい」がありません(このままでは渡されません)</p>
     </div>
   );
@@ -563,7 +598,14 @@ function ProtocolPageGroup({ board, page, pageIndex, spotIds, emptySpots, active
     </>
   );
 
-  if (board.pages.length <= 1) return <section class="protocol-page-group is-active">{contents}</section>;
+  if (board.pages.length <= 1) {
+    return (
+      <section class="protocol-page-group is-active">
+        <h3 class="protocol-list-heading">指示の一覧({count}件)</h3>
+        {contents}
+      </section>
+    );
+  }
 
   const heading = (
     <span class="protocol-page-heading">
@@ -598,28 +640,24 @@ function ProtocolPageGroup({ board, page, pageIndex, spotIds, emptySpots, active
 }
 
 /** H3: 指示書。右パネル全体を使い、行はボタン(クリックでピッカーを開く)。 */
-export function Sheet({ board }: { board: Board }) {
+export function Sheet({ board, specifiedCount, onShowExport }: { board: Board; specifiedCount: number; onShowExport: () => void }) {
   const lines = boardToLines(board);
   const prevRef = useRef<Map<string, string>>(new Map());
+  const prevBoardIdRef = useRef<string | null>(null);
   const [flashKeys, setFlashKeys] = useState<Set<string>>(new Set());
 
   useEffect(() => {
+    // 初回表示・ボード切り替えの直後は光らせない(prevMapが別ボードのnoteId、または空のとき)
+    const isFreshBoard = prevBoardIdRef.current !== board.id;
+    prevBoardIdRef.current = board.id;
     const prevMap = prevRef.current;
     const nextMap = new Map<string, string>();
     const changed = new Set<string>();
-    let spotId: string | undefined;
-    let idx = 0;
     for (const line of lines) {
-      if (line.spotId !== spotId) {
-        spotId = line.spotId;
-        idx = 0;
-      }
-      if (line.spotId && line.noteId) {
-        const key = lineKey(line.spotId, idx);
-        nextMap.set(key, line.text);
-        if (prevMap.has(key) && prevMap.get(key) !== line.text) changed.add(key);
-      }
-      idx++;
+      if (!line.noteId) continue;
+      const key = noteLineKey(line.noteId);
+      nextMap.set(key, line.text);
+      if (!isFreshBoard && (!prevMap.has(key) || prevMap.get(key) !== line.text)) changed.add(key);
     }
     prevRef.current = nextMap;
     if (changed.size === 0) return;
@@ -663,10 +701,16 @@ export function Sheet({ board }: { board: Board }) {
         />
       ))}
       {pageGroups.length === 0 && <p class="muted sheet-empty">対象を追加して、気になる箇所を指定してください。</p>}
-      <BoardCard board={board} />
-      <ImagePaletteCard board={board} />
-      <HtmlAuditCard board={board} />
-      <ExportButton board={board} />
+      <details class="sheet-section">
+        <summary>全体の設定</summary>
+        <BoardCard board={board} />
+      </details>
+      <details class="sheet-section">
+        <summary>診断</summary>
+        <ImagePaletteCard board={board} />
+        <HtmlAuditCard board={board} />
+      </details>
+      <ExportButton board={board} specifiedCount={specifiedCount} onShowExport={onShowExport} />
     </div>
   );
 }

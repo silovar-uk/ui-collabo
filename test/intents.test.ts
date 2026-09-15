@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { intentSuggestions } from '../src/lib/intents';
+import { intentSuggestions, isIntentApplied, toggleIntent } from '../src/lib/intents';
 import { newBoard, type Spot } from '../src/schema';
 import { boardToMarkdown } from '../src/export';
 
@@ -50,5 +50,46 @@ describe('intentSuggestions', () => {
     const suggestion = intentSuggestions('').find((item) => item.label === 'ここは変えたくない');
     const board = suggestion!.command.apply(makeBoard(spot), spot);
     expect(board.spots[0].keep).toBe(true);
+  });
+
+  it('要素付き(HTML)の箇所には位置(position:*)を出さない', () => {
+    const htmlSpot = makeSpot({ element: { selector: 'h1', tag: 'h1', computed: {} } });
+    const labels = intentSuggestions('', htmlSpot).map((item) => item.label);
+    expect(labels).not.toContain('左右中央に置きたい');
+    const searchLabels = intentSuggestions('中央', htmlSpot).map((item) => item.label);
+    expect(searchLabels.every((l) => !l.includes('位置'))).toBe(true);
+
+    const imageSpot = makeSpot();
+    expect(intentSuggestions('', imageSpot).map((item) => item.label)).toContain('左右中央に置きたい');
+  });
+});
+
+describe('フェーズC: isIntentApplied / toggleIntent', () => {
+  it('keepは適用済みならspot.keepで判定し、トグルで外れる', () => {
+    const spot = makeSpot({ keep: true });
+    expect(isIntentApplied('keep', spot)).toBe(true);
+    const board = toggleIntent(makeBoard(spot), spot, 'keep');
+    expect(board.spots[0].keep).toBe(false);
+  });
+
+  it('tone:*はひとことのchipsに含まれるかで判定し、トグルで追加・除去する', () => {
+    const spot = makeSpot();
+    expect(isIntentApplied('tone:主張を強く', spot)).toBe(false);
+    const added = toggleIntent(makeBoard(spot), spot, 'tone:主張を強く');
+    const addedSpot = added.spots[0];
+    expect(isIntentApplied('tone:主張を強く', addedSpot)).toBe(true);
+    const removed = toggleIntent(added, addedSpot, 'tone:主張を強く');
+    expect(isIntentApplied('tone:主張を強く', removed.spots[0])).toBe(false);
+  });
+
+  it('ladder:attr:deltaは同じ属性のtarget.deltaが一致するかで判定し、トグルで外れる', () => {
+    const spot = makeSpot();
+    expect(isIntentApplied('ladder:scale:1', spot)).toBe(false);
+    const added = toggleIntent(makeBoard(spot), spot, 'ladder:scale:1');
+    const addedSpot = added.spots[0];
+    expect(isIntentApplied('ladder:scale:1', addedSpot)).toBe(true);
+    expect(isIntentApplied('ladder:scale:-1', addedSpot)).toBe(false);
+    const removed = toggleIntent(added, addedSpot, 'ladder:scale:1');
+    expect(removed.spots[0].notes.some((n) => n.kind === 'ladder' && n.attr === 'scale')).toBe(false);
   });
 });

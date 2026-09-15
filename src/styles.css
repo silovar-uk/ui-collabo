@@ -266,6 +266,48 @@ button {
   white-space: nowrap;
 }
 
+.sheet-card-title {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--ink);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+
+.sheet-card-title .muted {
+  font-weight: 400;
+}
+
+.sheet-card-selected-ref {
+  gap: var(--sp-1);
+}
+
+.protocol-list-heading {
+  margin: 0;
+  color: var(--muted-text);
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .03em;
+}
+
+.sheet-section > summary {
+  cursor: pointer;
+  color: var(--muted-text);
+  font-size: var(--fs-xs);
+  font-weight: 700;
+}
+
+.sheet-show-export {
+  align-self: flex-start;
+}
+
 .sheet-line {
   display: flex;
   align-items: flex-start;
@@ -307,6 +349,55 @@ button {
 
 .sheet-line.is-flash {
   animation: sheet-line-flash 0.6s ease-out;
+}
+
+/* フェーズC: 右パネル「選択中」の箇所 */
+.selected-spot {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-3);
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.selected-spot-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.selected-spot-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.selected-spot-computed {
+  margin: 0;
+  font-size: var(--fs-xs);
+}
+
+.selected-spot-hint {
+  margin: 0;
+  padding: 4px 0;
+  color: var(--muted-text);
+  font-size: var(--fs-xs);
+  line-height: 1.4;
+}
+
+.selected-spot-hint:hover,
+.selected-spot-hint:focus-visible {
+  color: var(--ink);
+}
+
+.selected-spot-actions {
+  margin-top: 2px;
 }
 
 /* 引き出し線(H3) */
