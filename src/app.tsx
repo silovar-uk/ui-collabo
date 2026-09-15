@@ -1,14 +1,16 @@
 import { useEffect, useState } from 'preact/hooks';
-import { activePageId, currentBoard, currentBoardId, ready, saveStatus, selectedSpotId, spaceHeld } from './state';
+import { activePageId, benchFitPreference, currentBoard, currentBoardId, ready, saveStatus, selectedSpotId, spaceHeld } from './state';
 import { extractImageFiles } from './lib/image';
 import { handleFiles, handleHtml } from './lib/intake';
 import { hasSpecifiedContent } from './export';
-import { deriveWorkflowState, workflowPhaseIndex } from './lib/workflow';
+import { deriveWorkflowState, workflowPhaseIndex, type WorkflowState } from './lib/workflow';
+import { fitBoard, pageCanvasSize } from './lib/geometry';
+import { useBoxSize } from './lib/useBoxSize';
 import { Board } from './board/Board';
 import { HtmlBoard } from './board/HtmlBoard';
 import { Empty } from './panels/Empty';
 import { Sheet } from './panels/Sheet';
-import { IntentDock } from './panels/IntentDock';
+import { SelectedSpot } from './panels/SelectedSpot';
 import { LeaderLine } from './panels/LeaderLine';
 import { PagePager } from './panels/PagePager';
 import { ExportDrawer } from './panels/ExportDrawer';
@@ -39,10 +41,32 @@ function formatLabel(board: BoardModel): string {
   return 'FREE';
 }
 
+/** 4.2: 右パネル上部「次にやること」の文言。選択中は出さない。 */
+function nextStepText(workflow: WorkflowState, page: BoardModel['pages'][number] | null, activeCount: number, specifiedCount: number): string | null {
+  if (workflow === 'mark') {
+    if (page?.source) return '次にやること: 画面の気になる要素をクリックして選びます';
+    if (page?.image) return '次にやること: 画像の気になる所をドラッグで囲みます';
+    return '次にやること: 作業面をドラッグして箇所を作ります';
+  }
+  if (workflow === 'define') return `次にやること: 箇所を選んで「こうしたい」を入れます(まだ指示のない箇所 ${activeCount - specifiedCount}件)`;
+  if (workflow === 'handoff') return `次にやること: 指示がそろったら「AIに渡す」を押します(指示 ${specifiedCount}件)`;
+  if (workflow === 'verify') return '次にやること: AIが直した画像を貼って、各箇所を○/×で確かめます';
+  return null;
+}
+
 export function App() {
   const [drawer, setDrawer] = useState<DrawerKind>(null);
   const [dragOver, setDragOver] = useState(false);
   const [htmlDialogOpen, setHtmlDialogOpen] = useState(false);
+  const [isNarrowBench, setIsNarrowBench] = useState(() => window.matchMedia('(max-width: 920px)').matches);
+  const [benchSurfaceRef, benchSurfaceSize] = useBoxSize<HTMLDivElement>();
+
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 920px)');
+    const onChange = () => setIsNarrowBench(mq.matches);
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
 
   useEffect(() => {
     function onPaste(e: ClipboardEvent) {
@@ -105,6 +129,14 @@ export function App() {
     : page?.image
       ? 'ドラッグして気になる箇所を囲う'
       : '作業面で気になる箇所を指定する';
+  const canvasSize = board && page ? pageCanvasSize(board, page) : { width: 0, height: 0 };
+  const fit = fitBoard(
+    benchSurfaceSize.width,
+    benchSurfaceSize.height,
+    canvasSize.width,
+    canvasSize.height,
+    isNarrowBench ? 'width' : benchFitPreference.value,
+  );
 
   return (
     <div
@@ -173,7 +205,9 @@ export function App() {
               <li class={`${index === phase ? 'is-current' : ''}${index < phase ? ' is-complete' : ''}`} key={item.code}>
                 <span class="lab-phase-code">{item.code}</span>
                 <span class="lab-phase-en">{item.en}</span>
-                <span class="lab-phase-ja">{workflow === 'proofed' && index === 4 ? '校了' : item.ja}</span>
+                <span class="lab-phase-ja">
+                  {workflow === 'proofed' && index === 4 ? '校了' : index === 1 ? (page?.source ? '指す' : '囲う') : item.ja}
+                </span>
               </li>
             ))}
           </ol>
@@ -227,9 +261,23 @@ export function App() {
                 <PagePager board={board} currentPageId={activePageId.value} />
               </div>
               <span class="lab-bench-hint">{benchHint}</span>
+              {!isNarrowBench && (
+                <div class="lab-bench-fit-toggle" role="group" aria-label="表示">
+                  <button
+                    class={`btn-sm${fit.mode === 'whole' ? ' is-active' : ''}`}
+                    aria-pressed={fit.mode === 'whole'}
+                    onClick={() => (benchFitPreference.value = 'whole')}
+                  >全体</button>
+                  <button
+                    class={`btn-sm${fit.mode === 'width' ? ' is-active' : ''}`}
+                    aria-pressed={fit.mode === 'width'}
+                    onClick={() => (benchFitPreference.value = 'width')}
+                  >幅</button>
+                </div>
+              )}
             </div>
-            <div class="lab-bench-surface">
-              {page?.source ? <HtmlBoard key={page.id} board={board} page={page} /> : <Board />}
+            <div class="lab-bench-surface" ref={benchSurfaceRef}>
+              {page?.source ? <HtmlBoard key={page.id} board={board} page={page} fit={fit} /> : <Board fit={fit} />}
             </div>
           </section>
 
@@ -244,8 +292,12 @@ export function App() {
                 {keptCount > 0 && <span>{keptCount} 固定</span>}
               </div>
             </div>
-            <IntentDock board={board} />
-            <Sheet board={board} />
+            {!selectedSpotId.value && (() => {
+              const text = nextStepText(workflow, page, activeSpots.length, specifiedCount);
+              return text ? <p class="lab-next-step">{text}</p> : null;
+            })()}
+            <SelectedSpot board={board} />
+            <Sheet board={board} specifiedCount={specifiedCount} onShowExport={() => setDrawer('export')} />
           </aside>
           <LeaderLine />
         </main>

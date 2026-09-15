@@ -4,6 +4,7 @@ import { ruleRefOptions } from './lib/ruleRefs';
 import { resolveLadder } from './lib/htmlCss';
 import { resolveTargetStep } from './lib/ghost';
 import { geometryChanges, hasSpecifiedContent } from './lib/instructions';
+import { spotDisplayName } from './lib/describeElement';
 
 export { hasSpecifiedContent } from './lib/instructions';
 
@@ -66,6 +67,8 @@ export interface Line {
   spotId?: string;
   noteId?: string;
   pageId?: string;
+  /** H3改: 右パネル(Sheet)が行の種類を区別するための印。 */
+  part?: 'spot' | 'element' | 'position' | 'note';
 }
 
 function positionLines(spot: Spot): Line[] {
@@ -77,6 +80,7 @@ function positionLines(spot: Spot): Line[] {
     lines.push({
       text: `- 横位置: ${direction} ${pct(Math.abs(changes.x.delta))}(${formatTargetDelta(changes.x.from, changes.x.to)})`,
       spotId: spot.id,
+      part: 'position',
     });
   }
   if (changes.y) {
@@ -84,15 +88,16 @@ function positionLines(spot: Spot): Line[] {
     lines.push({
       text: `- 縦位置: ${direction} ${pct(Math.abs(changes.y.delta))}(${formatTargetDelta(changes.y.from, changes.y.to)})`,
       spotId: spot.id,
+      part: 'position',
     });
   }
   if (changes.width) {
     const ratio = changes.width.from > 0 ? `、約${(changes.width.to / changes.width.from).toFixed(1)}倍` : '';
-    lines.push({ text: `- 幅: ${formatTargetDelta(changes.width.from, changes.width.to)}${ratio}`, spotId: spot.id });
+    lines.push({ text: `- 幅: ${formatTargetDelta(changes.width.from, changes.width.to)}${ratio}`, spotId: spot.id, part: 'position' });
   }
   if (changes.height) {
     const ratio = changes.height.from > 0 ? `、約${(changes.height.to / changes.height.from).toFixed(1)}倍` : '';
-    lines.push({ text: `- 高さ: ${formatTargetDelta(changes.height.from, changes.height.to)}${ratio}`, spotId: spot.id });
+    lines.push({ text: `- 高さ: ${formatTargetDelta(changes.height.from, changes.height.to)}${ratio}`, spotId: spot.id, part: 'position' });
   }
   return lines;
 }
@@ -166,9 +171,9 @@ function zoneLabel(r: Rect): string {
 
 function layoutLines(spot: Spot, ctx: NoteCtx): Line[] {
   const lines: Line[] = [
-    { text: `- ${spot.n} ${spot.label || `箇所${spot.n}`}: ${zoneLabel(spot.rect)}(${rectLabel(spot.rect)})`, spotId: spot.id },
+    { text: `- ${spot.n} ${spotDisplayName(spot)}: ${zoneLabel(spot.rect)}(${rectLabel(spot.rect)})`, spotId: spot.id, part: 'spot' },
   ];
-  for (const n of spot.notes) lines.push({ text: `  ${formatNote(n, ctx)}`, spotId: spot.id, noteId: n.id });
+  for (const n of spot.notes) lines.push({ text: `  ${formatNote(n, ctx)}`, spotId: spot.id, noteId: n.id, part: 'note' });
   return lines;
 }
 
@@ -179,18 +184,18 @@ function carriedSuffix(spot: Spot): string {
 
 function spotSectionLines(spot: Spot, ctx: NoteCtx): Line[] {
   if (spot.element) return htmlSpotSectionLines(spot, spot.element, ctx);
-  const lines: Line[] = [{ text: `### ${spot.n} ${spot.label || `箇所${spot.n}`}(${rectLabel(spot.rect)})${carriedSuffix(spot)}`, spotId: spot.id }];
+  const lines: Line[] = [{ text: `### ${spot.n} ${spotDisplayName(spot)}(${rectLabel(spot.rect)})${carriedSuffix(spot)}`, spotId: spot.id, part: 'spot' }];
   // targetRect の差分は draft(今の状態がある)ときだけ意味を持つ
   if (ctx.imageRole === 'draft') lines.push(...positionLines(spot));
-  for (const n of spot.notes) lines.push({ text: formatNote(n, ctx), spotId: spot.id, noteId: n.id });
+  for (const n of spot.notes) lines.push({ text: formatNote(n, ctx), spotId: spot.id, noteId: n.id, part: 'note' });
   return lines;
 }
 
 function htmlSpotSectionLines(spot: Spot, element: ElementRef, ctx: NoteCtx): Line[] {
-  const lines: Line[] = [{ text: `### ${spot.n} ${spot.label || `箇所${spot.n}`}  \`${element.selector}\`${carriedSuffix(spot)}`, spotId: spot.id }];
+  const lines: Line[] = [{ text: `### ${spot.n} ${spotDisplayName(spot)}  \`${element.selector}\`${carriedSuffix(spot)}`, spotId: spot.id, part: 'spot' }];
   const textPart = element.text ? ` 「${element.text}」` : '';
-  lines.push({ text: `- 要素: <${element.tag}>${textPart}`, spotId: spot.id });
-  for (const n of spot.notes) lines.push({ text: formatHtmlNote(n, element, ctx), spotId: spot.id, noteId: n.id });
+  lines.push({ text: `- 要素: <${element.tag}>${textPart}`, spotId: spot.id, part: 'element' });
+  for (const n of spot.notes) lines.push({ text: formatHtmlNote(n, element, ctx), spotId: spot.id, noteId: n.id, part: 'note' });
   return lines;
 }
 
@@ -318,7 +323,7 @@ export function boardToLines(board: Board): Line[] {
     for (const spot of keptSpots) {
       // R2: 照合で○を付けた(前回修正済みの)箇所と分かるようにする
       const suffix = spot.carried && spot.check === 'ok' ? '(前回修正済み)' : '';
-      lines.push({ text: `- ${spot.n} ${spot.label || `箇所${spot.n}`}${suffix}`, spotId: spot.id });
+      lines.push({ text: `- ${spot.n} ${spotDisplayName(spot)}${suffix}`, spotId: spot.id, part: 'spot' });
     }
     lines.push({ text: '' });
   }

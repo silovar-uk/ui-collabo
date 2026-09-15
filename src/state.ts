@@ -3,6 +3,7 @@ import { kvGet, kvSet } from './lib/storage';
 import { emptyLibrary, newBoard, type Board, type Format, type LadderAttr, type Library, type RuleSet, type Rules, type Spot } from './schema';
 import { parseLibraryJson, repairStoredLibrary, validateLibrary } from './lib/libraryValidation';
 import type { ElementRecord } from './lib/audit';
+import type { FitMode } from './lib/geometry';
 
 const LIBRARY_KEY = 'library';
 const LAST_BOARD_KEY = 'lastBoardId';
@@ -30,7 +31,7 @@ export interface Toast {
 }
 export const toast = signal<Toast | null>(null);
 let toastTimer: ReturnType<typeof setTimeout> | undefined;
-function showToast(message: string, onUndo?: () => void): void {
+export function showToast(message: string, onUndo?: () => void): void {
   if (toastTimer) clearTimeout(toastTimer);
   toast.value = { message, onUndo };
   toastTimer = setTimeout(() => {
@@ -55,6 +56,13 @@ effect(() => {
   if (!board.pages.some((p) => p.id === activePageId.value)) {
     activePageId.value = board.pages[0]?.id ?? null;
   }
+});
+
+/** 作業面の表示(全体/幅)の手動選択。ページ切替で自動判定へ戻す(保存しない)。 */
+export const benchFitPreference = signal<FitMode | null>(null);
+effect(() => {
+  void activePageId.value;
+  benchFitPreference.value = null;
 });
 
 export async function init(): Promise<void> {
@@ -225,6 +233,9 @@ export const hoverLine = signal<{ spotId: string; lineKey: string } | null>(null
 
 /** R1-b: 色の棚卸しでスウォッチにホバーしたときの、ボード上でのハイライト色。 */
 export const paletteHoverColor = signal<string | null>(null);
+
+/** 右パネルの「細かく指定する」にポインターを載せている間、ボード上のバーを強調する。 */
+export const paletteHint = signal(false);
 
 // --- R1-c: HTMLページのばらつき診断 ---
 /** 表示中のHTMLページから集めた要素記録(HtmlBoardが更新する)。 */

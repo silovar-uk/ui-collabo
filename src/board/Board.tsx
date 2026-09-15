@@ -13,7 +13,7 @@ import {
   toggleOrderSpot,
   updateBoard,
 } from '../state';
-import { containRect, nominalCanvasSize, pxToRatio, ratioToPx, clampRect } from '../lib/geometry';
+import { containRect, pageCanvasSize, pxToRatio, ratioToPx, clampRect, type FitResult } from '../lib/geometry';
 import { useBoxSize } from '../lib/useBoxSize';
 import { useBoardKeys } from '../lib/useBoardKeys';
 import { getSpotEditTarget } from '../lib/spotTarget';
@@ -35,7 +35,7 @@ const MIN_DRAG_PX = 8;
 const HANDLES = ['nw', 'n', 'ne', 'w', 'e', 'sw', 's', 'se'] as const;
 type Handle = (typeof HANDLES)[number];
 
-export function Board() {
+export function Board({ fit }: { fit: FitResult }) {
   const board = currentBoard.value;
   const [containerRef, boxSize] = useBoxSize<HTMLDivElement>();
   const [draftPx, setDraftPx] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
@@ -49,9 +49,10 @@ export function Board() {
   useBoardKeys();
 
   const page = board?.pages.find((p) => p.id === activePageId.value) ?? null;
-  const canvasSize = page?.image ? { width: page.image.width, height: page.image.height } : nominalCanvasSize(board?.format ?? { kind: 'web' });
 
   if (!board || !page) return null;
+
+  const canvasSize = pageCanvasSize(board, page);
 
   const cr = containRect(boxSize.width, boxSize.height, canvasSize.width, canvasSize.height);
 
@@ -179,7 +180,7 @@ export function Board() {
     <div
       class={`board-surface${colorPickRequest.value ? ' is-picking-color' : ''}${measureRequest.value ? ' is-measuring' : ''}${orderMode.value ? ' is-order-mode' : ''}`}
       ref={containerRef}
-      style={{ aspectRatio: `${canvasSize.width} / ${canvasSize.height}` }}
+      style={{ width: fit.width, height: fit.height }}
       onPointerDown={(e) => onSurfacePointerDown(e as unknown as PointerEvent)}
       onPointerMove={(e) => onSurfacePointerMove(e as unknown as PointerEvent)}
       onPointerUp={onSurfacePointerUp}

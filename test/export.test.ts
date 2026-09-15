@@ -208,3 +208,51 @@ describe('Product Contract: geometry instructions', () => {
     expect(md).toContain('見る順: 1 見出し → 2 ロゴ');
   });
 });
+
+describe('フェーズC: Line.part', () => {
+  it('draft(画像)の見出し・位置・ノートの行にpartが付く', () => {
+    const board = makeDraftBoard();
+    board.spots[0].notes = [{ id: 'n1', kind: 'text', text: '', chips: ['主張を強く'] }];
+    const lines = boardToLines(board);
+    const heading = lines.find((l) => l.text.startsWith('### 1'));
+    expect(heading?.part).toBe('spot');
+    expect(lines.some((l) => l.part === 'position')).toBe(true);
+    expect(lines.find((l) => l.noteId === 'n1')?.part).toBe('note');
+    const kept = lines.find((l) => l.text.includes('2 ロゴ'));
+    expect(kept?.part).toBe('spot');
+  });
+
+  it('HTMLの箇所は見出し・要素・ノートの行にpartが付く', () => {
+    const board = newBoard({ kind: 'web' });
+    board.imageRole = 'draft';
+    board.pages = [{ id: 'p1', image: null, source: { kind: 'html', html: '', allowExternal: false, width: 1280, height: 800 } }];
+    board.spots = [
+      {
+        id: 's1',
+        pageId: 'p1',
+        n: 1,
+        label: '見出し',
+        rect: { x: 0.1, y: 0.1, w: 0.2, h: 0.1 },
+        keep: false,
+        notes: [{ id: 'n1', kind: 'text', text: '', chips: ['主張を強く'] }],
+        element: { selector: 'h1', tag: 'h1', computed: {} },
+      },
+    ];
+    const lines = boardToLines(board);
+    const heading = lines.find((l) => l.text.includes('`h1`'));
+    expect(heading?.part).toBe('spot');
+    expect(lines.find((l) => l.text.startsWith('- 要素:'))?.part).toBe('element');
+    expect(lines.find((l) => l.noteId === 'n1')?.part).toBe('note');
+  });
+
+  it('改行入りの箇所名は見出しで空白1つにまとまる', () => {
+    const board = newBoard({ kind: 'web' });
+    board.pages = [{ id: 'p1', image: null }];
+    board.spots = [
+      { id: 's1', pageId: 'p1', n: 1, label: 'リンク集\n- スケッチ風のやつ', rect: { x: 0.1, y: 0.1, w: 0.2, h: 0.1 }, keep: false, notes: [] },
+    ];
+    const md = boardToMarkdown(board);
+    expect(md).toContain('リンク集 - スケッチ風のやつ');
+    expect(md).not.toContain('リンク集\n');
+  });
+});

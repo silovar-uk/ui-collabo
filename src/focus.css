@@ -7,39 +7,10 @@
   grid-template-columns: minmax(0, 1fr) minmax(360px, 430px);
 }
 
-.intent-dock {
-  flex: 0 0 auto;
+.selected-spot {
   padding: 11px 12px 10px;
   background: #f4f7f3;
   border-bottom: 1px solid var(--lab-line-strong);
-}
-
-.intent-dock-head {
-  display: flex;
-  align-items: end;
-  justify-content: space-between;
-  gap: 10px;
-  margin-bottom: 8px;
-}
-
-.intent-dock-head > div {
-  min-width: 0;
-}
-
-.intent-dock-head strong {
-  display: block;
-  margin-top: 2px;
-  font-size: 15px;
-  line-height: 1.2;
-}
-
-.intent-target {
-  max-width: 52%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--lab-subtle);
-  font-size: 9px;
 }
 
 .intent-input {
@@ -93,35 +64,13 @@
   line-height: 1.4;
 }
 
-/*
- * 指示を最初に読む。既存DOMは壊さず、全体設定・診断は視覚上後段へ送る。
- * 次フェーズではSheet自体をsemanticに分割するが、このスプリントではデータモデルを触らない。
- */
-.lab-protocol-panel .sheet > .sheet-card-board {
-  order: 20;
+/* フェーズC: 全体の設定・診断は<details>で畳む(下のsheet-section定義を参照)。 */
+.sheet-section > .sheet-card-board {
   margin-top: 4px;
 }
 
-.lab-protocol-panel .sheet > .sheet-card:has(.palette-swatch-row),
-.lab-protocol-panel .sheet > .sheet-card:has(.audit-row) {
-  order: 30;
-}
-
-.lab-protocol-panel .sheet > .sheet-export {
-  order: 40;
-}
-
-.lab-protocol-panel .sheet > .sheet-card-board::before {
-  content: '全体設定';
-  display: block;
-  margin-bottom: 7px;
-  color: var(--lab-subtle);
-  font: 700 9px/1.2 'JetBrains Mono', ui-monospace, monospace;
-  letter-spacing: .035em;
-}
-
-.lab-protocol-panel .sheet > .sheet-card:has(.palette-swatch-row),
-.lab-protocol-panel .sheet > .sheet-card:has(.audit-row) {
+.sheet-section .sheet-card:has(.palette-swatch-row),
+.sheet-section .sheet-card:has(.audit-row) {
   background: #f7f8f5;
   opacity: .82;
 }
@@ -248,6 +197,7 @@
   }
 
   .lab-bench-surface {
+    flex: none;
     min-height: 0;
     padding: 18px 10px 30px;
   }
@@ -271,7 +221,7 @@
   }
 
   .lab-protocol-panel .sheet,
-  .intent-dock {
+  .selected-spot {
     min-width: 0;
   }
 

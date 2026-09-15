@@ -179,6 +179,7 @@ export interface Line {
   spotId?: string;   // この行が対応する箇所
   noteId?: string;   // この行を作ったノート(ある場合)
   pageId?: string;   // ページ見出し行(`## p.N`)のみ
+  part?: 'spot' | 'element' | 'position' | 'note';  // 行の種類(H3改。右パネルが行を出し分けるための印)
 }
 ```
 

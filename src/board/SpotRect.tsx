@@ -1,5 +1,6 @@
 import type { ContainRect } from '../lib/geometry';
 import { ratioToPx } from '../lib/geometry';
+import { normalizeText } from '../lib/describeElement';
 import { hoverSpotId } from '../state';
 import type { Spot } from '../schema';
 
@@ -20,13 +21,14 @@ export function SpotRect({ spot, cr, selected, orderIndex = -1, justCreated = fa
   const px = ratioToPx(spot.rect, cr);
   const isCompact = px.h < LABEL_MIN_HEIGHT;
   const hovered = hoverSpotId.value === spot.id;
-  const label = `箇所${spot.n}${spot.label ? ` ${spot.label}` : ''}${spot.keep ? ' 変えない' : ''}`;
+  const displayLabel = normalizeText(spot.label);
+  const label = `箇所${spot.n}${displayLabel ? ` ${displayLabel}` : ''}${spot.keep ? ' 変えない' : ''}`;
   return (
     <div
       data-spot-id={spot.id}
       class={`spot-rect${selected ? ' is-selected' : ''}${spot.keep ? ' is-kept' : ''}${isCompact ? ' is-compact' : ''}${justCreated ? ' is-new' : ''}${hovered ? ' is-hovered' : ''}`}
       style={{ left: px.x, top: px.y, width: px.w, height: px.h }}
-      title={isCompact ? spot.label : undefined}
+      title={isCompact ? displayLabel : undefined}
       role="button"
       tabIndex={0}
       aria-label={label}
@@ -43,7 +45,7 @@ export function SpotRect({ spot, cr, selected, orderIndex = -1, justCreated = fa
       }}
     >
       <span class="spot-badge">{spot.n}</span>
-      {spot.label && <span class="spot-label">{spot.label}</span>}
+      {displayLabel && <span class="spot-label">{displayLabel}</span>}
       {orderIndex >= 0 && <span class="spot-order-badge">{orderIndex + 1}</span>}
     </div>
   );
