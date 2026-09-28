@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'preact/hooks';
-import { activePageId, benchFitPreference, currentBoard, currentBoardId, ready, saveStatus, selectedSpotId, spaceHeld } from './state';
+import { activePageId, benchFitPreference, currentBoard, currentBoardId, handoffOpen, ready, saveStatus, selectedSpotId, spaceHeld } from './state';
 import { extractImageFiles } from './lib/image';
 import { handleFiles, handleHtml } from './lib/intake';
 import { hasSpecifiedContent } from './export';
+import { prepareHandoff, type PreparedHandoff } from './lib/handoff';
 import { deriveWorkflowState, workflowPhaseIndex, type WorkflowState } from './lib/workflow';
 import { fitBoard, pageCanvasSize } from './lib/geometry';
 import { useBoxSize } from './lib/useBoxSize';
@@ -11,6 +12,8 @@ import { HtmlBoard } from './board/HtmlBoard';
 import { Empty } from './panels/Empty';
 import { Sheet } from './panels/Sheet';
 import { SelectedSpot } from './panels/SelectedSpot';
+import { HandoffPreview } from './panels/HandoffPreview';
+import { HandoffPanel } from './panels/HandoffPanel';
 import { LeaderLine } from './panels/LeaderLine';
 import { PagePager } from './panels/PagePager';
 import { ExportDrawer } from './panels/ExportDrawer';
@@ -60,6 +63,8 @@ export function App() {
   const [htmlDialogOpen, setHtmlDialogOpen] = useState(false);
   const [isNarrowBench, setIsNarrowBench] = useState(() => window.matchMedia('(max-width: 920px)').matches);
   const [benchSurfaceRef, benchSurfaceSize] = useBoxSize<HTMLDivElement>();
+  const [prepared, setPrepared] = useState<PreparedHandoff | null>(null);
+  const [delivered, setDelivered] = useState(false);
 
   useEffect(() => {
     const mq = window.matchMedia('(max-width: 920px)');
@@ -98,6 +103,40 @@ export function App() {
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
     };
+  }, []);
+
+  // H2: ボードを切り替えたら送り状は閉じる(画面状態のみ、保存しない)
+  useEffect(() => {
+    handoffOpen.value = false;
+  }, [currentBoardId.value]);
+
+  // H2: 送り状を開いた時点で校正紙パケットを作っておく(4.10)
+  useEffect(() => {
+    const b = currentBoard.value;
+    if (!handoffOpen.value || !b) {
+      setPrepared(null);
+      setDelivered(false);
+      return;
+    }
+    let cancelled = false;
+    setPrepared(null);
+    setDelivered(false);
+    void prepareHandoff(b).then((p) => {
+      if (!cancelled) setPrepared(p);
+    });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [handoffOpen.value, currentBoardId.value]);
+
+  // H2: Escで作業面へ戻る(4.7)
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape' && handoffOpen.value) handoffOpen.value = false;
+    }
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
   }, []);
 
   if (!ready.value) {
@@ -201,15 +240,34 @@ export function App() {
             <strong>{board.round ? 'REVISION' : 'BASE'} / {formatLabel(board)}</strong>
           </div>
           <ol class="lab-phase-list">
-            {LAB_PHASES.map((item, index) => (
-              <li class={`${index === phase ? 'is-current' : ''}${index < phase ? ' is-complete' : ''}`} key={item.code}>
-                <span class="lab-phase-code">{item.code}</span>
-                <span class="lab-phase-en">{item.en}</span>
-                <span class="lab-phase-ja">
-                  {workflow === 'proofed' && index === 4 ? '校了' : index === 1 ? (page?.source ? '指す' : '囲う') : item.ja}
-                </span>
-              </li>
-            ))}
+            {LAB_PHASES.map((item, index) => {
+              const content = (
+                <>
+                  <span class="lab-phase-code">{item.code}</span>
+                  <span class="lab-phase-en">{item.en}</span>
+                  <span class="lab-phase-ja">
+                    {workflow === 'proofed' && index === 4 ? '校了' : index === 1 ? (page?.source ? '指す' : '囲う') : item.ja}
+                  </span>
+                </>
+              );
+              // H2: 03書く・04渡すだけをボタンにし、送り状の開閉を切り替える(4.7)
+              const clickable = index === 2 || index === 3;
+              return (
+                <li class={`${index === phase ? 'is-current' : ''}${index < phase ? ' is-complete' : ''}`} key={item.code}>
+                  {clickable ? (
+                    <button
+                      class="lab-phase-btn"
+                      disabled={index === 3 && specifiedCount === 0}
+                      onClick={() => (handoffOpen.value = index === 3)}
+                    >
+                      {content}
+                    </button>
+                  ) : (
+                    content
+                  )}
+                </li>
+              );
+            })}
           </ol>
           <div class="lab-sequence-readout" aria-label="ボード状態">
             <span><b>{String(board.pages.length).padStart(2, '0')}</b> specimens</span>
@@ -220,6 +278,21 @@ export function App() {
 
       {!board ? (
         <Empty dragOver={dragOver} onOpenHtmlIntake={() => setHtmlDialogOpen(true)} />
+      ) : handoffOpen.value ? (
+        <main class="main-layout lab-workbench is-single-specimen">
+          <section class="board-column lab-bench" aria-label="送り状プレビュー">
+            <HandoffPreview board={board} prepared={prepared} delivered={delivered} />
+          </section>
+          <aside class="side-panel lab-protocol-panel">
+            <HandoffPanel
+              board={board}
+              prepared={prepared}
+              delivered={delivered}
+              onDelivered={() => setDelivered(true)}
+              resetDelivered={() => setDelivered(false)}
+            />
+          </aside>
+        </main>
       ) : (
         <main class={`main-layout lab-workbench${board.pages.length > 1 ? '' : ' is-single-specimen'}`}>
           {board.pages.length > 1 && (
@@ -297,7 +370,7 @@ export function App() {
               return text ? <p class="lab-next-step">{text}</p> : null;
             })()}
             <SelectedSpot board={board} />
-            <Sheet board={board} specifiedCount={specifiedCount} onShowExport={() => setDrawer('export')} />
+            <Sheet board={board} specifiedCount={specifiedCount} />
           </aside>
           <LeaderLine />
         </main>

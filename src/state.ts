@@ -259,6 +259,9 @@ export const draftWish = signal<{ spotId: string; interp: ParsedWish } | null>(n
 /** H1: 朱のバー「＋足す」ポップオーバーの開閉。 */
 export const addPopoverOpen = signal(false);
 
+/** H2: 04送り状ビュー(画面状態のみ、保存しない)。 */
+export const handoffOpen = signal(false);
+
 export function toggleOrderSpot(id: string): void {
   updateBoard((b) => ({
     ...b,

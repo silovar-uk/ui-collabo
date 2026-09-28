@@ -1981,3 +1981,169 @@ button {
 }
 .save-status.is-saving { opacity: 0.75; }
 .save-status.is-error { color: var(--vermilion); font-weight: 600; }
+
+/* H2: 04 送り状 */
+.lab-phase-btn {
+  display: contents;
+  cursor: pointer;
+  background: none;
+  border: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+}
+
+.lab-phase-btn:disabled {
+  cursor: default;
+}
+
+.handoff-preview {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+  padding: var(--sp-3);
+}
+
+.handoff-preview-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-3);
+}
+
+.handoff-preview-body {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+}
+
+.handoff-skeleton {
+  align-self: center;
+}
+
+.handoff-paper {
+  width: min(720px, 100%);
+  height: fit-content;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  box-shadow: 0 1px 3px rgba(28, 27, 25, 0.08);
+  padding: var(--sp-4);
+  white-space: pre-wrap;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: var(--fs-sm);
+  line-height: 1.6;
+}
+
+.handoff-proof-wrap {
+  position: relative;
+  max-width: 100%;
+  height: fit-content;
+}
+
+.handoff-proof-img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  border: 1px solid var(--line);
+  box-shadow: 0 1px 3px rgba(28, 27, 25, 0.08);
+}
+
+.handoff-stamp {
+  top: 20%;
+}
+
+.handoff-panel {
+  display: flex;
+  flex-direction: column;
+}
+
+.handoff-panel-scroll {
+  padding: var(--sp-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.handoff-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.handoff-after {
+  border: 1px solid var(--vermilion);
+  background: rgba(228, 87, 46, 0.06);
+  padding: var(--sp-2) var(--sp-3);
+  font-size: var(--fs-sm);
+}
+
+.handoff-after ul {
+  margin: 4px 0 0;
+  padding-left: 18px;
+}
+
+.handoff-round-entry {
+  display: inline-block;
+  margin-top: 8px;
+}
+
+.handoff-dest {
+  display: flex;
+  gap: 4px;
+}
+
+.handoff-dest .btn-sm {
+  flex: 1;
+}
+
+.handoff-pack {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.handoff-pack li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 0;
+  border-bottom: 1px dotted var(--line);
+  font-size: var(--fs-sm);
+}
+
+.handoff-pack-ok {
+  color: var(--muted-text);
+  width: 14px;
+  flex: none;
+}
+
+.handoff-pack-how {
+  margin-left: auto;
+  color: var(--muted-text);
+  font-size: var(--fs-xs);
+}
+
+.handoff-pack-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.handoff-text-details summary {
+  cursor: pointer;
+}
+
+.handoff-panel-foot {
+  position: sticky;
+  bottom: 0;
+  border-top: 1px solid var(--line);
+  background: var(--panel);
+  padding: var(--sp-2) var(--sp-3);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.handoff-panel-foot .btn {
+  min-height: 42px;
+}
