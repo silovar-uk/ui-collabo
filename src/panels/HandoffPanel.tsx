@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'preact/hooks';
 import { copyText } from '../lib/clipboard';
+import { boardToMarkdown } from '../export';
 import type { PreparedHandoff } from '../lib/handoff';
 import { fileToImage } from '../lib/image';
 import { createRoundBoard } from '../lib/round';
@@ -74,7 +75,10 @@ export function HandoffPanel({
   const proof = prepared?.assets.find((a) => a.kind === 'proof-packet');
   const htmlBundle = prepared?.assets.find((a) => a.kind === 'html-bundle');
   const hasHtmlPages = (prepared?.htmlPageCount ?? 0) > 0;
-  const lineCount = prepared ? prepared.prompt.split('\n').length : 0;
+  // 校正紙パケットは開いた時点のもの(4.10)だが、文面は聞き返しに答えた後の内容を渡したいので
+  // boardからその都度作り直す(prepared.promptは開いた瞬間のスナップショットで古くなり得る)
+  const prompt = boardToMarkdown(board);
+  const lineCount = prompt.split('\n').length;
   // 05: 画像ページの再校・照合の入口(既存機能。届けた後に出す)
   const roundable = board.imageRole === 'draft' && board.pages.length > 0 && board.pages.every((p) => !!p.image);
 
@@ -110,7 +114,7 @@ export function HandoffPanel({
   }
 
   async function handleCopyOnly() {
-    const copied = await copyText(prepared?.prompt ?? '');
+    const copied = await copyText(prompt);
     setMessages([copied ? '文面をコピーしました' : 'コピーできませんでした。「渡す文面を見る」から手動でコピーしてください']);
     onDelivered();
   }
@@ -137,7 +141,7 @@ export function HandoffPanel({
       out.push('HTMLソースを保存しました。手動で添付してください');
     }
 
-    const promptUrl = `${cfg.prompt}${encodeURIComponent(prepared.prompt)}`;
+    const promptUrl = `${cfg.prompt}${encodeURIComponent(prompt)}`;
     if (promptUrl.length <= cfg.max) {
       out.push('指示文を入力欄に入れて開きます');
       const opened = window.open(promptUrl, '_blank', 'noopener,noreferrer');
@@ -149,7 +153,7 @@ export function HandoffPanel({
       try {
         if (proof) {
           await navigator.clipboard.write([
-            new ClipboardItem({ 'image/png': proof.blob, 'text/plain': new Blob([prepared.prompt], { type: 'text/plain' }) }),
+            new ClipboardItem({ 'image/png': proof.blob, 'text/plain': new Blob([prompt], { type: 'text/plain' }) }),
           ]);
         }
       } catch {
@@ -265,7 +269,7 @@ export function HandoffPanel({
 
         <details class="handoff-text-details" open={showText} onToggle={(e) => setShowText((e.currentTarget as HTMLDetailsElement).open)}>
           <summary class="muted">文面を見る</summary>
-          <pre class="export-pre">{prepared?.prompt ?? ''}</pre>
+          <pre class="export-pre">{prompt}</pre>
         </details>
       </div>
 
