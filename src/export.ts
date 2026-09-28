@@ -570,6 +570,46 @@ export async function renderProofSheet(page: { image: { dataUrl: string; width: 
     ctx.fillText(String(spot.n), x, y + 1);
   }
 
+  // H1: 「足す」を朱の点線の箱、「消す」を斜線で描き込む(4.9)
+  for (const spot of activeSpots) {
+    for (const note of spot.notes) {
+      if (note.kind === 'remove') {
+        const x = spot.rect.x * iw;
+        const y = spot.rect.y * ih;
+        const w = spot.rect.w * iw;
+        const h = spot.rect.h * ih;
+        ctx.save();
+        ctx.strokeStyle = PROOF_VERMILION;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(x + w, y + h);
+        ctx.moveTo(x + w, y);
+        ctx.lineTo(x, y + h);
+        ctx.stroke();
+        ctx.restore();
+      } else if (note.kind === 'add' && note.rect) {
+        const x = note.rect.x * iw;
+        const y = note.rect.y * ih;
+        const w = note.rect.w * iw;
+        const h = note.rect.h * ih;
+        ctx.save();
+        ctx.strokeStyle = PROOF_VERMILION;
+        ctx.lineWidth = 2;
+        ctx.setLineDash([6, 4]);
+        ctx.strokeRect(x, y, w, h);
+        ctx.setLineDash([]);
+        ctx.fillStyle = PROOF_VERMILION;
+        ctx.font = '12px "Noto Sans JP", sans-serif';
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'top';
+        const labelPart = note.label ? `「${note.label}」` : '';
+        ctx.fillText(`+${PART_LABEL[note.part]}${labelPart}`, x + 2, y + Math.min(h, 14));
+        ctx.restore();
+      }
+    }
+  }
+
   const marginX = iw + PROOF_PADDING;
   let cursorY = PROOF_PADDING;
   for (const block of blocks) {

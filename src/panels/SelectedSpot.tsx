@@ -4,6 +4,8 @@ import { intentSuggestions, isIntentApplied, toggleIntent } from '../lib/intents
 import { describeComputed } from '../lib/describeElement';
 import * as notes from '../lib/notes';
 import { parseWish, pickVocab, PART_LABEL, PLACE_LABEL, type ParsedWish } from '../lib/wishParse';
+import { defaultAddRect } from '../lib/addParts';
+import { pageCanvasSize } from '../lib/geometry';
 import { deleteSpot, draftWish, editingWishId, paletteHint, selectedSpotId, showToast, undo, updateBoard } from '../state';
 import { CommandPreviewView } from '../board/Palette';
 import { SpotLines } from './Sheet';
@@ -153,8 +155,14 @@ function SelectedSpotBody({ board, spot }: { board: Board; spot: Spot }) {
   function commit(row: WriteRow | undefined) {
     if (!row) return;
     if (row.type === 'interp') {
-      if (row.interp.kind === 'add') updateBoard(notes.addAddNote(spot.id, row.interp.part, row.interp.place, undefined, row.interp.label, row.interp.said));
-      else updateBoard(notes.toggleRemoveNote(spot.id, row.interp.said));
+      if (row.interp.kind === 'add') {
+        // H1: 書くと、生える(4.3)。既定位置は今すぐ計算して持たせる(ドラッグするまで待たない)
+        const page = board.pages.find((p) => p.id === spot.pageId);
+        const rect = page ? defaultAddRect(row.interp.part, row.interp.place, spot.rect, pageCanvasSize(board, page)) : undefined;
+        updateBoard(notes.addAddNote(spot.id, row.interp.part, row.interp.place, rect, row.interp.label, row.interp.said));
+      } else {
+        updateBoard(notes.toggleRemoveNote(spot.id, row.interp.said));
+      }
       if (editingId) updateBoard(notes.updateWishNote(spot.id, editingId, ''));
       stopEditing();
       return;

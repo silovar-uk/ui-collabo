@@ -169,6 +169,10 @@ export function HandoffPanel({
           </button>
         </div>
 
+        {!delivered && prepared && prepared.warnings.length > 0 && (
+          <p class="muted handoff-warnings">{prepared.warnings.join('。')}</p>
+        )}
+
         {delivered && (
           <div class="handoff-after">
             <strong>届けました。</strong>

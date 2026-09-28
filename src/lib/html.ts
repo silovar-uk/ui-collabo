@@ -1,4 +1,21 @@
+import type { PageSource } from '../schema';
+
 const SKIP_ABSOLUTIZE_RE = /^\s*(?:#|data:|blob:|javascript:|mailto:|tel:)/i;
+
+/** HtmlBoard・htmlSnapshotの両方が使う、iframe用に組み立てたHTML(CSP・プレビュー用styleタグを注入)。 */
+export function buildFrameHtml(source: PageSource): string {
+  const csp = source.allowExternal
+    ? "default-src 'none'; style-src 'unsafe-inline' https:; img-src data: https:; font-src data: https:; media-src data: https:; connect-src 'none'"
+    : "default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src data:; media-src data:; connect-src 'none'";
+  // CSPメタは先頭でも動くが、#uic-previewは既存の<style>と同じ詳細度のとき「後勝ち」させたいので</head>直前に置く
+  const meta = `<meta http-equiv="Content-Security-Policy" content="${csp}">`;
+  const overrides = `<style id="uic-preview"></style><style id="uic-hover"></style><style id="uic-audit-hover"></style>`;
+  if (/<\/head>/i.test(source.html)) {
+    return source.html.replace(/<head[^>]*>/i, (m) => `${m}${meta}`).replace(/<\/head>/i, `${overrides}</head>`);
+  }
+  if (/<html[^>]*>/i.test(source.html)) return source.html.replace(/<html[^>]*>/i, (m) => `${m}<head>${meta}${overrides}</head>`);
+  return `<head>${meta}${overrides}</head>${source.html}`;
+}
 
 function absoluteUrl(value: string, baseUrl: string): string {
   if (!value.trim() || SKIP_ABSOLUTIZE_RE.test(value)) return value;

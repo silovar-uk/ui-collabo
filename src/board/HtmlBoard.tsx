@@ -6,29 +6,16 @@ import { useBoardKeys } from '../lib/useBoardKeys';
 import { attachPicker, readComputed, uniqueSelector } from '../lib/domPick';
 import { normalizeText } from '../lib/describeElement';
 import { spotsToCss } from '../lib/htmlCss';
+import { buildFrameHtml } from '../lib/html';
 import { collectElementRecords, findRuleDeviations } from '../lib/audit';
 import { SpotRect } from './SpotRect';
 import { AddedPart, DraftAddPart, RemoveVeil } from './AddGhost';
 import { LensToggle } from './LensToggle';
 import { Palette } from './Palette';
-import type { Board, ElementRef, Note, Page, PageSource, Rect, Spot } from '../schema';
+import type { Board, ElementRef, Note, Page, Rect, Spot } from '../schema';
 
 // ponytail: 枠の再同期をこの差以上のときだけ行う。0.002は目安、実機で不自然なら調整する
 const RECT_RESYNC_THRESHOLD = 0.002;
-
-function buildFrameHtml(source: PageSource): string {
-  const csp = source.allowExternal
-    ? "default-src 'none'; style-src 'unsafe-inline' https:; img-src data: https:; font-src data: https:; media-src data: https:; connect-src 'none'"
-    : "default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src data:; media-src data:; connect-src 'none'";
-  // CSPメタは先頭でも動くが、#uic-previewは既存の<style>と同じ詳細度のとき「後勝ち」させたいので</head>直前に置く
-  const meta = `<meta http-equiv="Content-Security-Policy" content="${csp}">`;
-  const overrides = `<style id="uic-preview"></style><style id="uic-hover"></style><style id="uic-audit-hover"></style>`;
-  if (/<\/head>/i.test(source.html)) {
-    return source.html.replace(/<head[^>]*>/i, (m) => `${m}${meta}`).replace(/<\/head>/i, `${overrides}</head>`);
-  }
-  if (/<html[^>]*>/i.test(source.html)) return source.html.replace(/<html[^>]*>/i, (m) => `${m}<head>${meta}${overrides}</head>`);
-  return `<head>${meta}${overrides}</head>${source.html}`;
-}
 
 export function HtmlBoard({ board, page, fit }: { board: Board; page: Page; fit: FitResult }) {
   const source = page.source!;

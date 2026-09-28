@@ -2070,6 +2070,10 @@ button {
   justify-content: space-between;
 }
 
+.handoff-warnings {
+  margin: 0;
+}
+
 .handoff-after {
   border: 1px solid var(--vermilion);
   background: rgba(228, 87, 46, 0.06);

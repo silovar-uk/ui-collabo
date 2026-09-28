@@ -1,4 +1,5 @@
 import { boardToLines, boardToMarkdown, renderProofSheet } from '../export';
+import { snapshotHtmlPage } from './htmlSnapshot';
 import type { Board } from '../schema';
 
 export interface HandoffManifest {
@@ -38,22 +39,32 @@ function canvasToBlob(canvas: HTMLCanvasElement): Promise<Blob> {
   });
 }
 
-/** 複数ページの校正紙を、AIへ1回で添付できる1枚の縦長パケットへまとめる。 */
-async function renderProofPacket(board: Board): Promise<Blob | null> {
-  const imagePages = board.pages
-    .map((page, index) => ({ page, index }))
-    .filter((entry) => !!entry.page.image);
-  if (imagePages.length === 0) return null;
-
+/**
+ * 複数ページの校正紙を、AIへ1回で添付できる1枚の縦長パケットへまとめる。
+ * HTMLページはsnapshotHtmlPageで画像化してから同じ並びに含める。画像化できなかったページは
+ * (失敗ページ数を呼び出し側へ返し、送り状に「画像にできませんでした」と出せるようにして)スキップする。
+ */
+async function renderProofPacket(board: Board): Promise<{ blob: Blob | null; failedHtmlPages: number }> {
   const lines = boardToLines(board);
   const sheets: { index: number; canvas: HTMLCanvasElement }[] = [];
-  for (const { page, index } of imagePages) {
+  let failedHtmlPages = 0;
+
+  for (const [index, page] of board.pages.entries()) {
     const pageSpots = board.spots.filter((s) => s.pageId === page.id);
-    const canvas = await renderProofSheet({ image: page.image! }, pageSpots, lines);
-    sheets.push({ index, canvas });
+    if (page.image) {
+      sheets.push({ index, canvas: await renderProofSheet({ image: page.image }, pageSpots, lines) });
+    } else if (page.source) {
+      const snapshot = await snapshotHtmlPage(page.source);
+      if (!snapshot) {
+        failedHtmlPages++;
+        continue;
+      }
+      sheets.push({ index, canvas: await renderProofSheet({ image: snapshot }, pageSpots, lines) });
+    }
   }
 
-  if (sheets.length === 1) return canvasToBlob(sheets[0].canvas);
+  if (sheets.length === 0) return { blob: null, failedHtmlPages };
+  if (sheets.length === 1) return { blob: await canvasToBlob(sheets[0].canvas), failedHtmlPages };
 
   const HEADER = 44;
   const GAP = 20;
@@ -83,7 +94,7 @@ async function renderProofPacket(board: Board): Promise<Blob | null> {
     ctx.drawImage(sheet, 0, y);
     y += sheet.height + GAP;
   }
-  return canvasToBlob(canvas);
+  return { blob: await canvasToBlob(canvas), failedHtmlPages };
 }
 
 function buildHtmlBundle(board: Board): Blob | null {
@@ -105,11 +116,12 @@ export async function prepareHandoff(board: Board): Promise<PreparedHandoff> {
   const assets: PreparedHandoffAsset[] = [];
   const warnings: string[] = [];
 
-  const proofPacket = await renderProofPacket(board);
+  const { blob: proofPacket, failedHtmlPages } = await renderProofPacket(board);
   if (proofPacket) {
+    const pageCount = manifest.imagePageIds.length + manifest.htmlPageIds.length - failedHtmlPages;
     assets.push({
       kind: 'proof-packet',
-      filename: `${board.title || 'board'}-proof${manifest.imagePageIds.length > 1 ? '-pages' : ''}.png`,
+      filename: `${board.title || 'board'}-proof${pageCount > 1 ? '-pages' : ''}.png`,
       blob: proofPacket,
     });
   }
@@ -127,6 +139,9 @@ export async function prepareHandoff(board: Board): Promise<PreparedHandoff> {
   }
   if (manifest.htmlPageIds.length > 0) {
     warnings.push(`HTML ${manifest.htmlPageIds.length}ページ分のソースを1ファイルにまとめました`);
+  }
+  if (failedHtmlPages > 0) {
+    warnings.push(`このページは画像にできませんでした(${failedHtmlPages}件)。指示文はそのまま渡ります`);
   }
 
   return {
