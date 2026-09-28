@@ -63,7 +63,14 @@ export type Note =
   | { id: string; kind: 'motion'; motion: string;
       trigger: 'enter' | 'hover' | 'transition'; speed?: number; intensity?: number }
   | { id: string; kind: 'rule'; ruleRef: string }                    // 例: 'type.body.size'、'palette.accent'
-  | { id: string; kind: 'text'; text: string; chips: string[] };
+  | { id: string; kind: 'text'; text: string; chips: string[] }
+  | { id: string; kind: 'wish'; text: string }                       // H1追加。書き込む欄の自由文そのまま
+  | { id: string; kind: 'add'; part: AddPart; place: AddPlace;
+      label?: string; rect?: Rect; said?: string }                  // H1追加。label: undefined=未定、''=おまかせ
+  | { id: string; kind: 'remove'; said?: string };                   // H1追加
+
+export type AddPart = 'button' | 'heading' | 'text' | 'image' | 'icon' | 'link' | 'input' | 'line' | 'box';
+export type AddPlace = 'above' | 'below' | 'left' | 'right' | 'inside';
 
 export interface Spot {
   id: string;
@@ -230,8 +237,32 @@ R3)です。元画像の右に和紙色の余白(幅の45%、最小480px)を足�
 朱色点線の目標箱、中心から中心への矢印を元画像解像度で焼き込みます。バッジ径は画像幅の2.5%
 (最小24px)です。
 
-どちらもHTMLページはcanvasに焼けないため対象外です(`board.pages.every((p) => !p.image)` のとき、
-書き出しの画像タブ自体を出しません)。
+番号付き画像はHTMLページを対象外とします(`board.pages.every((p) => !p.image)` のとき、書き出しの
+画像タブ自体を出しません)。校正紙は、送り状(04)からはHTMLページも `snapshotHtmlPage`
+(`src/lib/htmlSnapshot.ts`)で画像化してから同じ校正紙パケットに含めます(H1・P5)。画像化に
+失敗した(タイムアウト・真っ白判定・例外)ページはスキップし、送り状にその件数を警告として出します。
+
+## 書き込む(wish・add・remove、H1)
+
+書き込む欄(03)に自由文を打つと、決定的な規則(`src/lib/wishParse.ts` の `parseWish`)が
+「足す」「消す」と読み取れる文だけを構造化し、読み取れない文はそのまま `wish` ノートになります。
+
+| ノート | 指示文(画像・白紙ページ) | 指示文(HTMLページ) |
+|---|---|---|
+| `wish` | `- 要望: 「もっと目立たせて大きく」` | 同じ |
+| `add` | `- 足す: 下に ボタン「詳しく見る」(目安: x 7%, y 31%, w 13%, h 3%)。原文「…」` | `` - 足す: この要素の直後(下)に <button>「詳しく見る」 を追加(目安: 幅 160px、高さ 44px)。原文「…」 `` |
+| `remove` | `- 消す: この部分を取り除く` | `- 消す: この要素を取り除く` |
+
+右パネルの「この箇所の指示」は、`add`/`remove` を上表よりも短い会話語(`足す: 下に ボタン「詳しく見る」`)
+で見せ、原文は行の下に小さく添えます(`src/panels/Sheet.tsx` の `humanNoteLine`)。`add.rect` は
+ドラッグで動かすと更新され、`place` が変わると `said`(原文)を消します(原文と食い違うため)。
+
+ボードに `wish`/`add`/`remove` のいずれかが1件でもあるときだけ、指示文の前置きの末尾に次の凡例を
+1行足します(使わないボードの出力は1文字も変わりません)。
+
+```
+> 「足す」は新しい要素の追加、「消す」は削除です。「要望」は依頼者の言葉をそのまま載せています。
+```
 
 ## HTMLページの指示文
 
