@@ -245,9 +245,12 @@ export const auditHoverSelectors = signal<string[] | null>(null);
 /** 「ルールで校正する」の要求。trueにするとHtmlBoardがルールから外れた要素を箇所にし、falseへ戻す。 */
 export const auditRuleCheckRequest = signal(false);
 
-export type PaletteCategory = 'position' | 'color' | 'font' | 'ladder' | 'motion' | 'text' | 'rule';
+export type PaletteCategory = 'position' | 'color' | 'font' | 'ladder' | 'motion' | 'text' | 'rule' | 'add';
 /** Sheetの行をクリックすると、その行を作ったピッカーをPaletteで開く要求。Paletteが読んだら自分でnullに戻す。 */
 export const requestOpenCategory = signal<{ spotId: string; category: PaletteCategory } | null>(null);
+
+/** H1: 書き込む欄で「要望」の行を押すと、その文が欄に戻り書き直し中になる(noteId)。 */
+export const editingWishId = signal<string | null>(null);
 
 export function toggleOrderSpot(id: string): void {
   updateBoard((b) => ({

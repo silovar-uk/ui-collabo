@@ -651,6 +651,9 @@ body {
 }
 
 .lab-protocol-panel .sheet-export {
+  position: sticky;
+  bottom: 0;
+  z-index: 15;
   margin: 8px -12px -20px;
   padding: 12px;
   background: linear-gradient(to bottom, rgba(251, 252, 249, .2), #fbfcf9 12px);

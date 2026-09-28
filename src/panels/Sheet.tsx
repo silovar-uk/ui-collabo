@@ -14,6 +14,7 @@ import {
   addAndOpenBoard,
   auditHoverSelectors,
   auditRuleCheckRequest,
+  editingWishId,
   hoverLine,
   hoverSpotId,
   htmlAuditRecords,
@@ -27,7 +28,8 @@ import {
 import { TONE_CHIPS } from '../vocab';
 import type { Board, Note, Page, Spot } from '../schema';
 
-function categoryForNote(note: Note): PaletteCategory {
+function categoryForNote(note: Note): PaletteCategory | null {
+  if (note.kind === 'wish' || note.kind === 'remove') return null;
   return note.kind === 'ladder' ? 'ladder' : note.kind;
 }
 
@@ -437,9 +439,14 @@ function selectSpotOnPage(spot: Spot): void {
 /** 箇所1件分の「この箇所の指示」の行(note/position行のみ)。人が読む短文で見せ、SelectedSpotとSheetの両方で使う。 */
 export function SpotLines({ spot, lines, flashKeys }: { spot: Spot; lines: Line[]; flashKeys: Set<string> }) {
   const rows = lines.filter((l) => l.part === 'note' || l.part === 'position');
-  function activate(category: PaletteCategory | null) {
+  function activate(spotId: string, noteId: string | undefined, category: PaletteCategory | null) {
     selectSpotOnPage(spot);
-    if (category) requestOpenCategory.value = { spotId: spot.id, category };
+    const note = noteId ? spot.notes.find((n) => n.id === noteId) : undefined;
+    if (note?.kind === 'wish') {
+      editingWishId.value = note.id;
+      return;
+    }
+    if (category) requestOpenCategory.value = { spotId, category };
   }
   return (
     <>
@@ -463,7 +470,7 @@ export function SpotLines({ spot, lines, flashKeys }: { spot: Spot; lines: Line[
               if (hoverSpotId.value === spot.id) hoverSpotId.value = null;
               if (hoverLine.value?.lineKey === key) hoverLine.value = null;
             }}
-            onClick={() => activate(clickCategory)}
+            onClick={() => activate(spot.id, line.noteId, clickCategory)}
           >
             <span class="sheet-line-text">{line.text.replace(/^\s*-\s*/, '')}</span>
             {line.noteId && (

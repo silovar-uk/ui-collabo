@@ -5,6 +5,7 @@ import { resolveLadder } from './lib/htmlCss';
 import { resolveTargetStep } from './lib/ghost';
 import { geometryChanges, hasSpecifiedContent } from './lib/instructions';
 import { spotDisplayName } from './lib/describeElement';
+import { HTML_PLACE, PART_LABEL, PART_TAG, PLACE_LABEL } from './lib/wishParse';
 
 export { hasSpecifiedContent } from './lib/instructions';
 
@@ -106,6 +107,7 @@ interface NoteCtx {
   imageRole: ImageRole | null;
   spotN: number;
   rules: Rules;
+  page: Page;
 }
 
 function formatNote(note: Note, ctx: NoteCtx): string {
@@ -153,6 +155,18 @@ function formatNote(note: Note, ctx: NoteCtx): string {
       }
       if ('step' in target) return `- ${def.label}: ${stepText(target.step)}`;
       return `- ${def.label}: ${relativeLabel ?? ''}`;
+    }
+    case 'wish':
+      return `- 要望: 「${note.text}」`;
+    case 'add': {
+      const labelPart = note.label ? `「${note.label}」` : note.label === '' ? '(文言はおまかせ)' : '';
+      const sizeHint = note.rect ? `(目安: ${rectLabel(note.rect)})` : '';
+      const saidPart = note.said ? `。原文「${note.said}」` : '';
+      return `- 足す: ${PLACE_LABEL[note.place]}に ${PART_LABEL[note.part]}${labelPart}${sizeHint}${saidPart}`;
+    }
+    case 'remove': {
+      const saidPart = note.said ? `。原文「${note.said}」` : '';
+      return `- 消す: この部分を取り除く${saidPart}`;
     }
   }
 }
@@ -217,6 +231,18 @@ function formatHtmlNote(note: Note, element: ElementRef, ctx: NoteCtx): string {
     const from = current ? `${current} → ` : '';
     return `- 色: ${from}${note.target}${via ? `(${via})` : ''}`;
   }
+  if (note.kind === 'add') {
+    const labelPart = note.label ? `「${note.label}」` : note.label === '' ? '(文言はおまかせ)' : '';
+    const width = ctx.page.source ? Math.round((note.rect?.w ?? 0) * ctx.page.source.width) : 0;
+    const height = ctx.page.source ? Math.round((note.rect?.h ?? 0) * ctx.page.source.height) : 0;
+    const sizeHint = note.rect ? `(目安: 幅 ${width}px、高さ ${height}px)` : '';
+    const saidPart = note.said ? `。原文「${note.said}」` : '';
+    return `- 足す: この要素の${HTML_PLACE[note.place]}に <${PART_TAG[note.part]}>${labelPart} を追加${sizeHint}${saidPart}`;
+  }
+  if (note.kind === 'remove') {
+    const saidPart = note.said ? `。原文「${note.said}」` : '';
+    return `- 消す: この要素を取り除く${saidPart}`;
+  }
   return formatNote(note, ctx);
 }
 
@@ -239,8 +265,11 @@ export function boardToLines(board: Board): Line[] {
   // S10: 1枚目だけを見ず、ボード内に画像ページ・HTMLページがあるかどうかで組み立てる
   const hasHtmlPage = pages.some((p) => p.source);
   const isMultiPage = pages.length > 1;
+  // H1: 「足す」「消す」「要望」を使ったときだけ凡例を足す(使わなければ既存の金型出力は変わらない)
+  const hasWishLikeNote = board.spots.some((s) => s.notes.some((n) => n.kind === 'wish' || n.kind === 'add' || n.kind === 'remove'));
+  const legend = hasWishLikeNote ? '\n> 「足す」は新しい要素の追加、「消す」は削除です。「要望」は依頼者の言葉をそのまま載せています。' : '';
 
-  const lines: Line[] = [{ text: hasHtmlPage ? HTML_PREAMBLE : PREAMBLE }, { text: '' }, { text: `# デザイン指示: ${board.title}` }, { text: '' }];
+  const lines: Line[] = [{ text: `${hasHtmlPage ? HTML_PREAMBLE : PREAMBLE}${legend}` }, { text: '' }, { text: `# デザイン指示: ${board.title}` }, { text: '' }];
   if (isMultiPage) {
     const formatLabel =
       board.format.kind === 'web' ? 'Web' : board.format.kind === 'slide' ? `スライド(${board.format.aspect})` : '白紙';
@@ -311,7 +340,7 @@ export function boardToLines(board: Board): Line[] {
       if (pageSpots.length === 0) continue;
       if (isMultiPage) lines.push({ text: pageHeading(p, pageIndex), pageId: p.id });
       for (const spot of pageSpots) {
-        const ctx: NoteCtx = { imageRole: board.imageRole, spotN: spot.n, rules: board.rules };
+        const ctx: NoteCtx = { imageRole: board.imageRole, spotN: spot.n, rules: board.rules, page: p };
         lines.push(...(isBrief ? layoutLines(spot, ctx) : spotSectionLines(spot, ctx)));
         lines.push({ text: '' });
       }

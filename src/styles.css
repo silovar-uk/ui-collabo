@@ -376,11 +376,84 @@ button {
   white-space: nowrap;
   font-size: 14px;
   font-weight: 600;
+  font-family: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  border-bottom: 1px dashed transparent;
+  padding: 1px 0;
+}
+
+.selected-spot-name:hover,
+.selected-spot-name:focus {
+  border-bottom-color: var(--line);
+  outline: none;
 }
 
 .selected-spot-computed {
   margin: 0;
   font-size: var(--fs-xs);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.write-field {
+  position: relative;
+}
+
+.write-rows {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 100%;
+  z-index: 5;
+  background: var(--panel);
+  border: 1px solid var(--ink);
+  border-top: 0;
+  box-shadow: 0 10px 24px rgba(28, 27, 25, 0.15);
+}
+
+.write-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  border: 0;
+  background: none;
+  text-align: left;
+  padding: 8px 10px;
+  font: inherit;
+  font-size: var(--fs-sm);
+  color: var(--ink);
+}
+
+.write-row-kind {
+  font-size: 10px;
+  color: var(--muted-text);
+  width: 52px;
+  flex: none;
+}
+
+.write-row-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.write-row-enter {
+  font-size: var(--fs-xs);
+  color: var(--muted-text);
+}
+
+.write-row.is-hi {
+  background: rgba(228, 87, 46, 0.08);
+}
+
+.write-row.is-hi .write-row-enter {
+  color: var(--vermilion);
 }
 
 .selected-spot-hint {
@@ -965,7 +1038,8 @@ button {
   background: rgba(28, 27, 25, 0.3);
   display: flex;
   justify-content: flex-end;
-  z-index: 10;
+  /* .lab-panel-header(z-index: 20)より上に出す(P1: ドロワーの重なり修正) */
+  z-index: 30;
   animation: drawer-backdrop-fade 180ms ease-out;
 }
 

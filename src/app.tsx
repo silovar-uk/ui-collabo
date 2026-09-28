@@ -26,7 +26,7 @@ type DrawerKind = 'export' | 'rules' | 'library' | null;
 const LAB_PHASES = [
   { code: '01', en: 'INPUT', ja: '貼る' },
   { code: '02', en: 'MARK', ja: '囲う' },
-  { code: '03', en: 'DEFINE', ja: '選ぶ' },
+  { code: '03', en: 'DEFINE', ja: '書く' },
   { code: '04', en: 'HANDOFF', ja: '渡す' },
   { code: '05', en: 'VERIFY', ja: '照合' },
 ] as const;
@@ -48,7 +48,7 @@ function nextStepText(workflow: WorkflowState, page: BoardModel['pages'][number]
     if (page?.image) return '次にやること: 画像の気になる所をドラッグで囲みます';
     return '次にやること: 作業面をドラッグして箇所を作ります';
   }
-  if (workflow === 'define') return `次にやること: 箇所を選んで「こうしたい」を入れます(まだ指示のない箇所 ${activeCount - specifiedCount}件)`;
+  if (workflow === 'define') return `次にやること: 箇所を選んで「こうしたい」を書きます(まだ指示のない箇所 ${activeCount - specifiedCount}件)`;
   if (workflow === 'handoff') return `次にやること: 指示がそろったら「AIに渡す」を押します(指示 ${specifiedCount}件)`;
   if (workflow === 'verify') return '次にやること: AIが直した画像を貼って、各箇所を○/×で確かめます';
   return null;
