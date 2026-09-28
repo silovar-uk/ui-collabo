@@ -152,7 +152,7 @@ export function updateWishNote(spotId: string, noteId: string, text: string): Re
   }));
 }
 
-export function addAddNote(spotId: string, part: AddPart, place: AddPlace, rect: Rect, label?: string, said?: string): Recipe {
+export function addAddNote(spotId: string, part: AddPart, place: AddPlace, rect?: Rect, label?: string, said?: string): Recipe {
   return updateSpot(spotId, (s) => ({ ...s, notes: [...s.notes, { id: crypto.randomUUID(), kind: 'add', part, place, rect, label, said }] }));
 }
 

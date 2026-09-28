@@ -3,25 +3,54 @@ import { boardToLines } from '../export';
 import { intentSuggestions, isIntentApplied, toggleIntent } from '../lib/intents';
 import { describeComputed } from '../lib/describeElement';
 import * as notes from '../lib/notes';
+import { parseWish, pickVocab, PART_LABEL, PLACE_LABEL, type ParsedWish } from '../lib/wishParse';
 import { deleteSpot, editingWishId, paletteHint, selectedSpotId, showToast, undo, updateBoard } from '../state';
 import { CommandPreviewView } from '../board/Palette';
 import { SpotLines } from './Sheet';
-import type { Board, Spot } from '../schema';
+import type { AddPart, AddPlace, Board, Spot } from '../schema';
 
 const NO_FLASH = new Set<string>();
 // H1: 8文字以下のときだけ既存コマンド検索を「候補」として出す(4.4)
 const CANDIDATE_MAX_CHARS = 8;
+// H1: 位置の語だけ打ったとき、続けてよく使う部品を提示する(4.2)
+const PLACE_ONLY_RE = /^(上|下|左|右|横|中)(に|へ)?$/;
+const PLACE_ONLY_MAP: Record<string, AddPlace> = { 上: 'above', 下: 'below', 左: 'left', 右: 'right', 横: 'right', 中: 'inside' };
+const PLACE_ONLY_PARTS: AddPart[] = ['button', 'text', 'heading', 'image'];
 
 function isTypingTarget(el: EventTarget | null): boolean {
   const tag = (el as HTMLElement | null)?.tagName;
   return tag === 'INPUT' || tag === 'TEXTAREA';
 }
 
-type WriteRow = { type: 'candidate'; label: string; commandId: string } | { type: 'raw'; label: string };
+type WriteRow =
+  | { type: 'interp'; label: string; interp: ParsedWish }
+  | { type: 'pick'; label: string; commandId: string }
+  | { type: 'candidate'; label: string; commandId: string }
+  | { type: 'raw'; label: string };
 
 function buildRows(text: string, spot: Spot, editing: boolean): WriteRow[] {
   if (!text) return [];
   const rows: WriteRow[] = [];
+  const interp = parseWish(text);
+  const placeOnly = text.match(PLACE_ONLY_RE);
+  if (!interp && placeOnly) {
+    const place = PLACE_ONLY_MAP[placeOnly[1]];
+    for (const part of PLACE_ONLY_PARTS) {
+      rows.push({
+        type: 'interp',
+        label: `${PLACE_LABEL[place]}に ${PART_LABEL[part]}`,
+        interp: { kind: 'add', part, place, said: `${text}${PART_LABEL[part]}` },
+      });
+    }
+  }
+  if (interp) {
+    rows.push({
+      type: 'interp',
+      label: interp.kind === 'add' ? `${PLACE_LABEL[interp.place]}に ${PART_LABEL[interp.part]}${interp.label ? `「${interp.label}」` : ''}` : 'この要素を取り除く',
+      interp,
+    });
+  }
+  for (const p of pickVocab(text)) rows.push({ type: 'pick', label: p.label, commandId: p.id });
   if (text.length <= CANDIDATE_MAX_CHARS) {
     for (const s of intentSuggestions(text, spot, 3)) rows.push({ type: 'candidate', label: s.label, commandId: s.command.id });
   }
@@ -29,10 +58,25 @@ function buildRows(text: string, spot: Spot, editing: boolean): WriteRow[] {
   return rows.slice(-6);
 }
 
-/** 強調の初期位置: 入力が既存候補と完全一致すればその候補、それ以外は「そのまま」(常に最後の行)。 */
+/** 強調の初期位置: 読み取りがあればそれ、入力が既存候補と完全一致すればその候補、それ以外は「そのまま」。 */
 function defaultHi(rows: WriteRow[], text: string): number {
-  const exact = rows.findIndex((r) => r.type === 'candidate' && r.label === text);
+  const interpIdx = rows.findIndex((r) => r.type === 'interp');
+  if (interpIdx >= 0) return interpIdx;
+  const exact = rows.findIndex((r) => (r.type === 'candidate' || r.type === 'pick') && r.label === text);
   return exact >= 0 ? exact : rows.length - 1;
+}
+
+function rowKey(row: WriteRow): string {
+  if (row.type === 'interp') return `interp:${row.interp.kind}`;
+  if (row.type === 'raw') return 'raw';
+  return row.commandId;
+}
+
+function rowKind(row: WriteRow, editing: boolean): string {
+  if (row.type === 'interp') return row.interp.kind === 'add' ? '足す' : '消す';
+  if (row.type === 'pick') return '拾った';
+  if (row.type === 'candidate') return '候補';
+  return editing ? '書き直す' : 'そのまま';
 }
 
 /** H3改: 右パネル上部の「選択中」。書き込む・入った指示を確かめる・箇所を管理する場所(4.1)。 */
@@ -99,6 +143,18 @@ function SelectedSpotBody({ board, spot }: { board: Board; spot: Spot }) {
 
   function commit(row: WriteRow | undefined) {
     if (!row) return;
+    if (row.type === 'interp') {
+      if (row.interp.kind === 'add') updateBoard(notes.addAddNote(spot.id, row.interp.part, row.interp.place, undefined, row.interp.label, row.interp.said));
+      else updateBoard(notes.toggleRemoveNote(spot.id, row.interp.said));
+      if (editingId) updateBoard(notes.updateWishNote(spot.id, editingId, ''));
+      stopEditing();
+      return;
+    }
+    if (row.type === 'pick') {
+      // H1: 拾った語彙を適用しても、続けて書けるよう入力欄の文は残す(4.4)
+      apply(row.commandId, row.label);
+      return;
+    }
     if (row.type === 'candidate') {
       apply(row.commandId, row.label);
       stopEditing();
@@ -157,7 +213,7 @@ function SelectedSpotBody({ board, spot }: { board: Board; spot: Spot }) {
           <div class="write-rows" role="listbox">
             {rows.map((row, i) => (
               <button
-                key={row.type === 'candidate' ? row.commandId : 'raw'}
+                key={rowKey(row)}
                 type="button"
                 role="option"
                 aria-selected={i === hi}
@@ -167,7 +223,7 @@ function SelectedSpotBody({ board, spot }: { board: Board; spot: Spot }) {
                   commit(row);
                 }}
               >
-                <span class="write-row-kind">{row.type === 'candidate' ? '候補' : editingId ? '書き直す' : 'そのまま'}</span>
+                <span class="write-row-kind">{rowKind(row, !!editingId)}</span>
                 <span class="write-row-text">{row.label}</span>
                 {i === hi && <span class="write-row-enter">Enter ↵</span>}
               </button>

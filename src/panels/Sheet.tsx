@@ -26,11 +26,22 @@ import {
   type PaletteCategory,
 } from '../state';
 import { TONE_CHIPS } from '../vocab';
+import { PART_LABEL, PLACE_LABEL } from '../lib/wishParse';
 import type { Board, Note, Page, Spot } from '../schema';
 
 function categoryForNote(note: Note): PaletteCategory | null {
   if (note.kind === 'wish' || note.kind === 'remove') return null;
   return note.kind === 'ladder' ? 'ladder' : note.kind;
+}
+
+/** 4.6: 右パネルの人が読む短文は、AIへ渡す文面(HTML向けの詳しい言い回し)とは分け、原文は下に小さく添える。 */
+function humanNoteLine(note: Note): { text: string; said?: string } | null {
+  if (note.kind === 'add') {
+    const labelPart = note.label ? `「${note.label}」` : note.label === '' ? '(文言はおまかせ)' : '';
+    return { text: `足す: ${PLACE_LABEL[note.place]}に ${PART_LABEL[note.part]}${labelPart}`, said: note.said };
+  }
+  if (note.kind === 'remove') return { text: '消す: この部分を取り除く', said: note.said };
+  return null;
 }
 
 /** ノート由来の行の安定キー。追加された行も検知できるよう、行の位置ではなくノートidにする(H3改)。 */
@@ -452,11 +463,9 @@ export function SpotLines({ spot, lines, flashKeys }: { spot: Spot; lines: Line[
     <>
       {rows.map((line, i) => {
         const key = line.noteId ? noteLineKey(line.noteId) : lineKey(spot.id, i);
-        const clickCategory: PaletteCategory | null = line.noteId
-          ? categoryForNote(spot.notes.find((n) => n.id === line.noteId)!)
-          : line.part === 'position'
-            ? 'position'
-            : null;
+        const note = line.noteId ? spot.notes.find((n) => n.id === line.noteId) : undefined;
+        const clickCategory: PaletteCategory | null = note ? categoryForNote(note) : line.part === 'position' ? 'position' : null;
+        const human = note ? humanNoteLine(note) : null;
         return (
           <button
             key={key}
@@ -472,7 +481,10 @@ export function SpotLines({ spot, lines, flashKeys }: { spot: Spot; lines: Line[
             }}
             onClick={() => activate(spot.id, line.noteId, clickCategory)}
           >
-            <span class="sheet-line-text">{line.text.replace(/^\s*-\s*/, '')}</span>
+            <span class="sheet-line-text">
+              {human?.text ?? line.text.replace(/^\s*-\s*/, '')}
+              {human?.said && <span class="sheet-line-said">原文「{human.said}」</span>}
+            </span>
             {line.noteId && (
               <span
                 class="sheet-line-remove"

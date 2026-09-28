@@ -333,6 +333,13 @@ button {
   flex: 1;
 }
 
+.sheet-line-said {
+  display: block;
+  font-size: var(--fs-xs);
+  color: var(--muted-text);
+  white-space: normal;
+}
+
 .sheet-line-remove {
   color: var(--muted-text);
   padding: 0 4px;
