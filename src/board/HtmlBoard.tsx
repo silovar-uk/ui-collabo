@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef } from 'preact/hooks';
-import { auditHoverSelectors, auditRuleCheckRequest, htmlAuditRecords, lens, nextSpotNumber, selectedSpotId, spaceHeld, updateBoard } from '../state';
-import { containRect, clampRect, type FitResult } from '../lib/geometry';
+import { auditHoverSelectors, auditRuleCheckRequest, draftWish, htmlAuditRecords, lens, nextSpotNumber, selectedSpotId, spaceHeld, updateBoard } from '../state';
+import { containRect, clampRect, pageCanvasSize, type FitResult } from '../lib/geometry';
 import { useBoxSize } from '../lib/useBoxSize';
 import { useBoardKeys } from '../lib/useBoardKeys';
 import { attachPicker, readComputed, uniqueSelector } from '../lib/domPick';
@@ -8,6 +8,7 @@ import { normalizeText } from '../lib/describeElement';
 import { spotsToCss } from '../lib/htmlCss';
 import { collectElementRecords, findRuleDeviations } from '../lib/audit';
 import { SpotRect } from './SpotRect';
+import { AddedPart, DraftAddPart, RemoveVeil } from './AddGhost';
 import { LensToggle } from './LensToggle';
 import { Palette } from './Palette';
 import type { Board, ElementRef, Note, Page, PageSource, Rect, Spot } from '../schema';
@@ -241,6 +242,23 @@ export function HtmlBoard({ board, page, fit }: { board: Board; page: Page; fit:
           .map((spot) => (
             <SpotRect key={spot.id} spot={spot} cr={cr} selected={selectedSpotId.value === spot.id} onSelect={() => (selectedSpotId.value = spot.id)} />
           ))}
+        {/* H1: 書くと、生える・描いて足す・消す(4.3)。「いま」表示では隠す */}
+        {!spaceHeld.value && lens.value !== 'before' && (
+          <>
+            {board.spots
+              .filter((s) => s.pageId === page.id && (s.notes.some((n) => n.kind === 'remove') || (s.id === selectedSpotId.value && draftWish.value?.interp.kind === 'remove')))
+              .map((spot) => <RemoveVeil key={spot.id} spot={spot} cr={cr} />)}
+            {board.spots
+              .filter((s) => s.pageId === page.id)
+              .flatMap((spot) => spot.notes.filter((n): n is Extract<typeof n, { kind: 'add' }> => n.kind === 'add').map((note) => <AddedPart key={note.id} note={note} board={board} spot={spot} cr={cr} />))}
+            {(() => {
+              const spot = board.spots.find((s) => s.id === selectedSpotId.value && s.pageId === page.id);
+              const draft = draftWish.value;
+              if (!spot || !draft || draft.spotId !== spot.id || draft.interp.kind !== 'add') return null;
+              return <DraftAddPart part={draft.interp.part} place={draft.interp.place} label={draft.interp.label} spot={spot} pageSize={pageCanvasSize(board, page)} cr={cr} />;
+            })()}
+          </>
+        )}
       </div>
       <LensToggle />
       {(() => {

@@ -1,6 +1,7 @@
 import { signal, computed, effect } from '@preact/signals';
 import { kvGet, kvSet } from './lib/storage';
 import { emptyLibrary, newBoard, type Board, type Format, type LadderAttr, type Library, type RuleSet, type Rules, type Spot } from './schema';
+import type { ParsedWish } from './lib/wishParse';
 import { parseLibraryJson, repairStoredLibrary, validateLibrary } from './lib/libraryValidation';
 import type { ElementRecord } from './lib/audit';
 import type { FitMode } from './lib/geometry';
@@ -251,6 +252,12 @@ export const requestOpenCategory = signal<{ spotId: string; category: PaletteCat
 
 /** H1: 書き込む欄で「要望」の行を押すと、その文が欄に戻り書き直し中になる(noteId)。 */
 export const editingWishId = signal<string | null>(null);
+
+/** H1: 書き込む欄が「足す/消す」と読めている間、選択中の箇所に出す下書き(4.3)。 */
+export const draftWish = signal<{ spotId: string; interp: ParsedWish } | null>(null);
+
+/** H1: 朱のバー「＋足す」ポップオーバーの開閉。 */
+export const addPopoverOpen = signal(false);
 
 export function toggleOrderSpot(id: string): void {
   updateBoard((b) => ({

@@ -1,20 +1,31 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
-import { colorPickRequest, measureRequest, paletteHint, pickerOpen, requestOpenCategory, updateBoard } from '../state';
+import { colorPickRequest, measureRequest, paletteHint, pickerOpen, requestOpenCategory, showToast, undo, updateBoard } from '../state';
 import * as notes from '../lib/notes';
 import { ruleRefOptions } from '../lib/ruleRefs';
 import { getSpotEditTarget } from '../lib/spotTarget';
-import { clampRect, palettePosition, ratioToPx, type ContainRect } from '../lib/geometry';
+import { clampRect, palettePosition, pageCanvasSize, ratioToPx, type ContainRect } from '../lib/geometry';
 import { LADDER_TO_CSS, nearestStepIndex, parseNumber } from '../lib/htmlCss';
+import { defaultAddRect } from '../lib/addParts';
+import { PART_LABEL } from '../lib/wishParse';
 import type { Command } from '../lib/commands';
 import { COLOR_ROLES, FONT_MOODS, LADDER_ATTRS, LADDER_TABLE, TONE_CHIPS } from '../vocab';
 import { Ladder } from '../pickers/Ladder';
 import { ColorPicker } from '../pickers/ColorPicker';
 import { FontPicker } from '../pickers/FontPicker';
 import { MotionPicker } from '../pickers/MotionPicker';
-import type { Board, LadderAttr, Note, Spot } from '../schema';
+import type { AddPart, AddPlace, Board, LadderAttr, Note, Spot } from '../schema';
 import type { PaletteCategory } from '../state';
 
 type Category = PaletteCategory | null;
+
+const ADD_PARTS: AddPart[] = ['button', 'heading', 'text', 'image', 'icon', 'link', 'input', 'line', 'box'];
+const ADD_PLACES: { id: AddPlace; label: string }[] = [
+  { id: 'above', label: '上' },
+  { id: 'below', label: '下' },
+  { id: 'left', label: '左' },
+  { id: 'right', label: '右' },
+  { id: 'inside', label: '中' },
+];
 
 /** 検索結果の実物プレビュー。右パネルの「言葉で選ぶ」からも使う。 */
 export function CommandPreviewView({ command }: { command: Command }) {
@@ -145,6 +156,20 @@ export function Palette({ board, spot, cr }: { board: Board; spot: Spot; cr: Con
   const ruleNotes = spot.notes.filter((n): n is Extract<Note, { kind: 'rule' }> => n.kind === 'rule');
   const textNote = spot.notes.find((n): n is Extract<Note, { kind: 'text' }> => n.kind === 'text');
   const hasLadder = LADDER_ATTRS.some((a) => spot.notes.some((n) => n.kind === 'ladder' && n.attr === a));
+  const addNotes = spot.notes.filter((n): n is Extract<Note, { kind: 'add' }> => n.kind === 'add');
+  const removeNote = spot.notes.find((n): n is Extract<Note, { kind: 'remove' }> => n.kind === 'remove');
+
+  function toggleRemove() {
+    const had = !!removeNote;
+    updateBoard(notes.toggleRemoveNote(spot.id));
+    showToast(had ? '「消す」を外しました' : '「消す」を付けました(いま表示では元のまま)', () => undo());
+  }
+
+  function addPart(part: AddPart) {
+    const page = board.pages.find((p) => p.id === spot.pageId);
+    const rect = page ? defaultAddRect(part, 'below', spot.rect, pageCanvasSize(board, page)) : undefined;
+    updateBoard(notes.addAddNote(spot.id, part, 'below', rect));
+  }
 
   const px = ratioToPx(spot.rect, cr);
   const surface = { width: cr.left * 2 + cr.width, height: cr.top * 2 + cr.height };
@@ -171,8 +196,11 @@ export function Palette({ board, spot, cr }: { board: Board; spot: Spot; cr: Con
         <button class={`palette-btn${motionNote ? ' has-value' : ''}`} onClick={() => toggle('motion')} title="動き">
           動き
         </button>
-        <button class={`palette-btn${textNote ? ' has-value' : ''}`} onClick={() => toggle('text')} title="ひとこと">
-          ひとこと
+        <button class={`palette-btn${addNotes.length ? ' has-value' : ''}`} onClick={() => toggle('add')} title="足す">
+          ＋足す
+        </button>
+        <button class={`palette-btn${removeNote ? ' has-value' : ''}`} onClick={toggleRemove} title="消す">
+          消す
         </button>
         {ruleOptions.length > 0 && (
           <button class={`palette-btn${ruleNotes.length ? ' has-value' : ''}`} onClick={() => toggle('rule')} title="ルール">
@@ -374,6 +402,51 @@ export function Palette({ board, spot, cr }: { board: Board; spot: Spot; cr: Con
               value={textNote?.text ?? ''}
               onInput={(e) => updateBoard(notes.updateTextNote(spot.id, (n) => ({ ...n, text: (e.target as HTMLTextAreaElement).value })))}
             />
+          </div>
+        )}
+
+        {open === 'add' && (
+          <div class="field">
+            <span class="field-label">足す部品(押すと、この箇所の下に置きます。あとでドラッグで動かせます)</span>
+            <div class="add-part-cards">
+              {ADD_PARTS.map((part) => (
+                <button key={part} class="add-part-card" onClick={() => addPart(part)}>
+                  <span class={`add-part-card-mini add-part-${part}`} aria-hidden="true" />
+                  {PART_LABEL[part]}
+                </button>
+              ))}
+            </div>
+            {addNotes.length > 0 && (
+              <div class="add-part-notes">
+                <span class="field-label">この箇所の足す部品({addNotes.length})</span>
+                {addNotes.map((note) => (
+                  <div class="note-block" key={note.id}>
+                    <div class="note-summary-row">
+                      <span class="note-summary-text">{PART_LABEL[note.part]}</span>
+                      <button class="btn-sm" onClick={() => updateBoard(notes.removeNote(spot.id, note.id))}>削除</button>
+                    </div>
+                    <input
+                      class="text-input"
+                      placeholder="文言(空でおまかせ)"
+                      value={note.label ?? ''}
+                      onInput={(e) => updateBoard(notes.patchAddNote(spot.id, note.id, { label: (e.target as HTMLInputElement).value }))}
+                    />
+                    <div class="chip-row">
+                      {ADD_PLACES.map((p) => (
+                        <button
+                          key={p.id}
+                          class={`chip${note.place === p.id ? ' is-active' : ''}`}
+                          aria-pressed={note.place === p.id}
+                          onClick={() => updateBoard(notes.patchAddNote(spot.id, note.id, { place: p.id, said: undefined }))}
+                        >
+                          {p.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 

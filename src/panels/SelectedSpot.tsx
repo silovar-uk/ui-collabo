@@ -4,7 +4,7 @@ import { intentSuggestions, isIntentApplied, toggleIntent } from '../lib/intents
 import { describeComputed } from '../lib/describeElement';
 import * as notes from '../lib/notes';
 import { parseWish, pickVocab, PART_LABEL, PLACE_LABEL, type ParsedWish } from '../lib/wishParse';
-import { deleteSpot, editingWishId, paletteHint, selectedSpotId, showToast, undo, updateBoard } from '../state';
+import { deleteSpot, draftWish, editingWishId, paletteHint, selectedSpotId, showToast, undo, updateBoard } from '../state';
 import { CommandPreviewView } from '../board/Palette';
 import { SpotLines } from './Sheet';
 import type { AddPart, AddPlace, Board, Spot } from '../schema';
@@ -99,6 +99,15 @@ function SelectedSpotBody({ board, spot }: { board: Board; spot: Spot }) {
   const elementInfo = spot.element ? describeComputed(spot.element.computed).join('・') : null;
 
   useEffect(() => setHi(defaultHi(rows, text)), [rows, text]);
+
+  // H1: 書くと、生える(4.3)。強調中の行が「足す/消す」と読めている間だけ、選択中の箇所に下書きを出す
+  useEffect(() => {
+    const row = rows[hi];
+    draftWish.value = row?.type === 'interp' ? { spotId: spot.id, interp: row.interp } : null;
+    return () => {
+      if (draftWish.value?.spotId === spot.id) draftWish.value = null;
+    };
+  }, [rows, hi, spot.id]);
 
   // 書き込む欄の行(要望)を押すと、その文が欄に戻り「書き直し中」になる
   useEffect(() => {

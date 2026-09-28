@@ -602,6 +602,220 @@ button {
   background: none;
 }
 
+/* H1: 足す部品・下書き・消す印(4.3) */
+.add-part {
+  position: absolute;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px dashed var(--vermilion);
+  background: rgba(228, 87, 46, 0.12);
+  color: var(--vermilion);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+  /* .html-frame-overlay/.ov は既定でpointer-events:noneのため、部品自身で再度有効にする */
+  pointer-events: auto;
+}
+
+.add-part.is-grabbing {
+  cursor: grabbing;
+  box-shadow: 0 8px 20px rgba(228, 87, 46, 0.25);
+}
+
+.add-part.is-draft {
+  opacity: 0.55;
+  cursor: default;
+  pointer-events: none;
+  animation: add-part-breathe 1.2s ease-in-out infinite;
+}
+
+.add-part-button {
+  border-radius: 4px;
+}
+
+.add-part-heading {
+  justify-content: flex-start;
+  padding: 0 10px;
+  font-size: 20px;
+}
+
+.add-part-text {
+  padding: 8px;
+}
+
+.add-part-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+
+.add-part-lines i {
+  display: block;
+  height: 6px;
+  background: rgba(228, 87, 46, 0.35);
+  border-radius: 3px;
+}
+
+.add-part-lines i.is-short {
+  width: 60%;
+}
+
+.add-part-image {
+  background-image:
+    linear-gradient(135deg, transparent 48%, rgba(228, 87, 46, 0.5) 49% 51%, transparent 52%),
+    linear-gradient(45deg, transparent 48%, rgba(228, 87, 46, 0.5) 49% 51%, transparent 52%);
+}
+
+.add-part-icon {
+  border-radius: 50%;
+}
+
+.add-part-line {
+  border-width: 0 0 3px;
+  background: none;
+}
+
+.add-part-input {
+  justify-content: flex-start;
+  padding: 0 10px;
+  font-weight: 400;
+  background: #fff;
+}
+
+.add-part-link {
+  text-decoration: underline;
+  background: none;
+  border-style: dotted;
+}
+
+.add-part-inner {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.add-part-tag {
+  position: absolute;
+  left: -2px;
+  top: calc(100% + 4px);
+  background: var(--vermilion);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 500;
+  padding: 1px 6px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.add-part.is-draft .add-part-tag {
+  background: var(--panel);
+  color: var(--vermilion);
+  border: 1px dashed var(--vermilion);
+}
+
+.add-part-grip {
+  position: absolute;
+  right: -6px;
+  bottom: -6px;
+  width: 12px;
+  height: 12px;
+  background: var(--vermilion);
+  cursor: nwse-resize;
+}
+
+@keyframes add-part-breathe {
+  50% {
+    opacity: 0.9;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .add-part.is-draft {
+    animation: none;
+    opacity: 0.85;
+  }
+}
+
+.remove-veil {
+  position: absolute;
+  z-index: 3;
+  background: repeating-linear-gradient(45deg, rgba(228, 87, 46, 0.18) 0 6px, transparent 6px 12px);
+  pointer-events: none;
+}
+
+.remove-veil::before,
+.remove-veil::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 120%;
+  height: 3px;
+  background: var(--vermilion);
+}
+
+.remove-veil::before {
+  transform: translate(-50%, -50%) rotate(15deg);
+}
+
+.remove-veil::after {
+  transform: translate(-50%, -50%) rotate(-15deg);
+}
+
+.add-part-cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+
+.add-part-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 4px 6px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  font-size: var(--fs-xs);
+  color: var(--muted-text);
+}
+
+.add-part-card:hover {
+  border-color: var(--vermilion);
+  color: var(--vermilion);
+}
+
+.add-part-card-mini {
+  display: block;
+  width: 100%;
+  height: 28px;
+  border: 2px dashed var(--vermilion);
+  background: rgba(228, 87, 46, 0.12);
+}
+
+.add-part-notes {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.remove-veil-tag {
+  position: absolute;
+  right: -2px;
+  top: -22px;
+  background: var(--vermilion);
+  color: #fff;
+  font-size: 12px;
+  padding: 1px 6px;
+}
+
 .spot-rect.is-selected {
   border-color: var(--vermilion);
   box-shadow: 0 0 0 3px rgba(228, 87, 46, 0.15);
