@@ -3,7 +3,10 @@ import { copyText } from '../lib/clipboard';
 import type { PreparedHandoff } from '../lib/handoff';
 import { fileToImage } from '../lib/image';
 import { createRoundBoard } from '../lib/round';
-import { addAndOpenBoard, handoffOpen } from '../state';
+import { askBack, TONE_TO_CONCRETE, type AskItem } from '../lib/askBack';
+import { toggleIntent } from '../lib/intents';
+import * as notes from '../lib/notes';
+import { activePageId, addAndOpenBoard, handoffOpen, selectedSpotId, updateBoard } from '../state';
 import type { Board } from '../schema';
 
 type Dest = 'chatgpt' | 'claude' | 'copy';
@@ -51,6 +54,9 @@ export function HandoffPanel({
   const [includeHtml, setIncludeHtml] = useState(true);
   const [messages, setMessages] = useState<string[]>([]);
   const [showText, setShowText] = useState(false);
+  // 4.8: 「このままでいい」で消した項目は、送り状を閉じるまで(=このコンポーネントが生きている間)だけ覚える
+  const [dismissed, setDismissed] = useState<Set<string>>(new Set());
+  const asks = askBack(board).filter((a) => !dismissed.has(a.key));
 
   useEffect(() => {
     try {
@@ -156,6 +162,21 @@ export function HandoffPanel({
     onDelivered();
   }
 
+  function goWrite(spotId: string) {
+    const spot = board.spots.find((s) => s.id === spotId);
+    if (!spot) return;
+    activePageId.value = spot.pageId;
+    selectedSpotId.value = spotId;
+    handoffOpen.value = false;
+  }
+
+  function applyCommand(spotId: string, commandId: string) {
+    updateBoard((b) => {
+      const spot = b.spots.find((s) => s.id === spotId);
+      return spot ? toggleIntent(b, spot, commandId) : b;
+    });
+  }
+
   return (
     <div class="handoff-panel">
       <div class="handoff-panel-scroll">
@@ -198,6 +219,25 @@ export function HandoffPanel({
             </button>
           ))}
         </div>
+
+        <div class="field-label handoff-field-label-row">
+          <span>AIが聞き返しそうなこと({asks.length})</span>
+          <span class="muted">答えなくても渡せます</span>
+        </div>
+        {asks.map((item) => (
+          <AskCard
+            key={item.key}
+            item={item}
+            onGoWrite={() => goWrite(item.spotId)}
+            onKeep={() => updateBoard(notes.setKeep(item.spotId, true))}
+            onRemove={() => updateBoard(notes.toggleRemoveNote(item.spotId))}
+            onApplyCommand={(commandId) => applyCommand(item.spotId, commandId)}
+            onDismiss={() => setDismissed((prev) => new Set(prev).add(item.key))}
+            onSetLabel={(noteId, label) => updateBoard(notes.patchAddNote(item.spotId, noteId, { label }))}
+            onSetColorRole={(noteId, role) => updateBoard(notes.patchColorNote(item.spotId, noteId, { role }))}
+            onSetSpotLabel={(label) => updateBoard(notes.setLabel(item.spotId, label))}
+          />
+        ))}
 
         <div class="field-label">届けるもの</div>
         <ul class="handoff-pack">
@@ -245,6 +285,83 @@ export function HandoffPanel({
           <button class="btn" disabled={!prepared} onClick={handleDeliver}>
             {DEST_LABEL[dest]}で開く
           </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+const COLOR_ROLE_CHOICES: { role: 'text' | 'bg' | 'line'; label: string }[] = [
+  { role: 'text', label: '文字' },
+  { role: 'bg', label: '背景' },
+  { role: 'line', label: '線' },
+];
+
+/** 4.8: 聞き返し1件の質問カード。答えるとaskBackの次の計算結果からその項目が消える。 */
+function AskCard({
+  item,
+  onGoWrite,
+  onKeep,
+  onRemove,
+  onApplyCommand,
+  onDismiss,
+  onSetLabel,
+  onSetColorRole,
+  onSetSpotLabel,
+}: {
+  item: AskItem;
+  onGoWrite: () => void;
+  onKeep: () => void;
+  onRemove: () => void;
+  onApplyCommand: (commandId: string) => void;
+  onDismiss: () => void;
+  onSetLabel: (noteId: string, label: string) => void;
+  onSetColorRole: (noteId: string, role: 'text' | 'bg' | 'line') => void;
+  onSetSpotLabel: (label: string) => void;
+}) {
+  const [draft, setDraft] = useState('');
+
+  return (
+    <div class="handoff-ask">
+      <p class="handoff-ask-q">
+        <span class="spot-badge">{item.spotLabel}</span>
+        {item.question}
+      </p>
+      <div class="chip-row">
+        {item.type === 'empty' && (
+          <>
+            <button class="chip" onClick={onKeep}>変えない</button>
+            <button class="chip" onClick={onRemove}>消す</button>
+            <button class="chip" onClick={onGoWrite}>書き込む →</button>
+          </>
+        )}
+        {item.type === 'tone-only' && (
+          <>
+            {(TONE_TO_CONCRETE[item.chip] ?? []).map((c) => (
+              <button key={c.commandId} class="chip" onClick={() => onApplyCommand(c.commandId)}>
+                {c.label}
+              </button>
+            ))}
+            <button class="chip" onClick={onDismiss}>このままでいい</button>
+          </>
+        )}
+        {item.type === 'label' && (
+          <>
+            <input class="text-input" placeholder="例: 詳しく見る" value={draft} onInput={(e) => setDraft((e.target as HTMLInputElement).value)} />
+            <button class="chip" onClick={() => onSetLabel(item.noteId, draft.trim())}>決める</button>
+            <button class="chip" onClick={() => onSetLabel(item.noteId, '')}>おまかせ</button>
+          </>
+        )}
+        {item.type === 'color-role' && COLOR_ROLE_CHOICES.map((c) => (
+          <button key={c.role} class="chip" onClick={() => onSetColorRole(item.noteId, c.role)}>
+            {c.label}
+          </button>
+        ))}
+        {item.type === 'selector' && (
+          <>
+            <input class="text-input" placeholder="例: 申し込みボタン" value={draft} onInput={(e) => setDraft((e.target as HTMLInputElement).value)} />
+            <button class="chip" onClick={() => onSetSpotLabel(draft.trim())}>決める</button>
+          </>
         )}
       </div>
     </div>

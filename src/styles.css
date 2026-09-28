@@ -2074,6 +2074,33 @@ button {
   margin: 0;
 }
 
+.handoff-field-label-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--sp-2);
+}
+
+.handoff-ask {
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--vermilion);
+  background: var(--panel);
+  padding: var(--sp-2) var(--sp-3);
+}
+
+.handoff-ask-q {
+  margin: 0 0 6px;
+  font-size: var(--fs-sm);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.handoff-ask .text-input {
+  flex: 1;
+  min-width: 120px;
+}
+
 .handoff-after {
   border: 1px solid var(--vermilion);
   background: rgba(228, 87, 46, 0.06);
