@@ -1,4 +1,4 @@
-import type { Board, LadderAttr, Note, Spot } from '../schema';
+import type { AddPart, AddPlace, Board, LadderAttr, Note, Rect, Spot } from '../schema';
 import { LADDER_TABLE } from '../vocab';
 
 /** H3: パレット・指示書の両方が使う、箇所のノート更新の純関数群。すべて(board: Board) => Boardを返す。 */
@@ -135,6 +135,37 @@ export function promoteSpacingToRule(note: Extract<Note, { kind: 'ladder' }>): R
     if (!('step' in note.target)) return b;
     return { ...b, rules: { ...b.rules, spacing: note.target.step } };
   };
+}
+
+// --- 書き込む(4.1: wish・add・remove) ---
+export function addWishNote(spotId: string, text: string): Recipe {
+  return updateSpot(spotId, (s) => ({ ...s, notes: [...s.notes, { id: crypto.randomUUID(), kind: 'wish', text }] }));
+}
+
+/** 書き直し中のwishノートをEnterで確定する。空文字なら削除する。 */
+export function updateWishNote(spotId: string, noteId: string, text: string): Recipe {
+  return updateSpot(spotId, (s) => ({
+    ...s,
+    notes: text.trim()
+      ? s.notes.map((n) => (n.id === noteId && n.kind === 'wish' ? { ...n, text } : n))
+      : s.notes.filter((n) => n.id !== noteId),
+  }));
+}
+
+export function addAddNote(spotId: string, part: AddPart, place: AddPlace, rect?: Rect, label?: string, said?: string): Recipe {
+  return updateSpot(spotId, (s) => ({ ...s, notes: [...s.notes, { id: crypto.randomUUID(), kind: 'add', part, place, rect, label, said }] }));
+}
+
+export function patchAddNote(spotId: string, noteId: string, patch: Partial<Extract<Note, { kind: 'add' }>>): Recipe {
+  return updateSpot(spotId, (s) => ({ ...s, notes: s.notes.map((n) => (n.id === noteId && n.kind === 'add' ? { ...n, ...patch } : n)) }));
+}
+
+/** 「消す」のトグル。1箇所に1つだけ持つ。 */
+export function toggleRemoveNote(spotId: string, said?: string): Recipe {
+  return updateSpot(spotId, (s) => {
+    const existing = s.notes.find((n): n is Extract<Note, { kind: 'remove' }> => n.kind === 'remove');
+    return { ...s, notes: existing ? s.notes.filter((n) => n !== existing) : [...s.notes, { id: crypto.randomUUID(), kind: 'remove', said }] };
+  });
 }
 
 // --- ルールに合わせる ---

@@ -90,6 +90,9 @@ export function spotsToCss(spots: Spot[]): string {
       } else if (note.kind === 'font') {
         const mood = FONT_MOODS.find((m) => m.id === note.mood);
         if (mood) decls.push(`font-family: ${mood.font}, ${mood.fallback} !important;`);
+      } else if (note.kind === 'remove') {
+        // display: none は後続の枠がずれるため使わず、透過だけで「消す」を示す(4.3)
+        decls.push('opacity: .18 !important;');
       }
     }
     if (decls.length > 0) blocks.push(`${spot.element.selector} { ${decls.join(' ')} }`);

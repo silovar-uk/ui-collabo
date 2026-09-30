@@ -3,6 +3,7 @@ import {
   activePageId,
   colorPickRequest,
   currentBoard,
+  draftWish,
   lens,
   measureRequest,
   nextSpotNumber,
@@ -23,6 +24,7 @@ import { nearestStepIndex } from '../lib/htmlCss';
 import type { Rect, Spot } from '../schema';
 import { SpotRect } from './SpotRect';
 import { Ghost } from './Ghost';
+import { AddedPart, DraftAddPart, RemoveVeil } from './AddGhost';
 import { LensToggle } from './LensToggle';
 import { ImageRoleToggle } from './ImageRoleToggle';
 import { Palette } from './Palette';
@@ -221,6 +223,24 @@ export function Board({ fit }: { fit: FitResult }) {
             }}
           />
         ))}
+
+      {/* H1: 書くと、生える・描いて足す・消す(4.3)。「いま」表示では隠す */}
+      {!spaceHeld.value && lens.value !== 'before' && (
+        <>
+          {board.spots
+            .filter((s) => s.pageId === page.id && (s.notes.some((n) => n.kind === 'remove') || (s.id === selectedSpotId.value && draftWish.value?.interp.kind === 'remove')))
+            .map((spot) => <RemoveVeil key={spot.id} spot={spot} cr={cr} />)}
+          {board.spots
+            .filter((s) => s.pageId === page.id)
+            .flatMap((spot) => spot.notes.filter((n): n is Extract<typeof n, { kind: 'add' }> => n.kind === 'add').map((note) => <AddedPart key={note.id} note={note} board={board} spot={spot} cr={cr} />))}
+          {(() => {
+            const spot = board.spots.find((s) => s.id === selectedSpotId.value && s.pageId === page.id);
+            const draft = draftWish.value;
+            if (!spot || !draft || draft.spotId !== spot.id || draft.interp.kind !== 'add') return null;
+            return <DraftAddPart part={draft.interp.part} place={draft.interp.place} label={draft.interp.label} spot={spot} pageSize={canvasSize} cr={cr} />;
+          })()}
+        </>
+      )}
 
       {draftPx && <div class="spot-rect draft" style={{ left: draftPx.x, top: draftPx.y, width: draftPx.w, height: draftPx.h }} />}
 

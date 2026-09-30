@@ -19,7 +19,7 @@ const FORMATS: { format: Format; label: string }[] = [
 const STEPS = [
   { n: 1, code: 'INPUT', verb: '貼る', desc: '画像を貼る' },
   { n: 2, code: 'MARK', verb: '囲う', desc: '気になる箇所を囲む' },
-  { n: 3, code: 'DEFINE', verb: '選ぶ', desc: 'こうしたいを選ぶ' },
+  { n: 3, code: 'DEFINE', verb: '書く', desc: 'こうしたいを書く' },
   { n: 4, code: 'HANDOFF', verb: '渡す', desc: '校正画像と指示をAIへ' },
   { n: 5, code: 'VERIFY', verb: '照合', desc: '直った版を貼って確かめる' },
 ];

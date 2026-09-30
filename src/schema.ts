@@ -49,13 +49,19 @@ export type LadderAttr =
   | 'speed'
   | 'intensity';
 
+export type AddPart = 'button' | 'heading' | 'text' | 'image' | 'icon' | 'link' | 'input' | 'line' | 'box';
+export type AddPlace = 'above' | 'below' | 'left' | 'right' | 'inside';
+
 export type Note =
   | { id: string; kind: 'ladder'; attr: LadderAttr; current?: number; target: { step: number } | { delta: number } }
   | { id: string; kind: 'color'; role?: 'text' | 'bg' | 'accent' | 'line'; current?: string; target: string; via?: string }
   | { id: string; kind: 'font'; mood: string }
   | { id: string; kind: 'motion'; motion: string; trigger: 'enter' | 'hover' | 'transition'; speed?: number; intensity?: number }
   | { id: string; kind: 'rule'; ruleRef: string }
-  | { id: string; kind: 'text'; text: string; chips: string[] };
+  | { id: string; kind: 'text'; text: string; chips: string[] }
+  | { id: string; kind: 'wish'; text: string }
+  | { id: string; kind: 'add'; part: AddPart; place: AddPlace; label?: string; rect?: Rect; said?: string }
+  | { id: string; kind: 'remove'; said?: string };
 
 export type ComputedKey =
   | 'font-size'

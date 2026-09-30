@@ -1,6 +1,7 @@
 import { signal, computed, effect } from '@preact/signals';
 import { kvGet, kvSet } from './lib/storage';
 import { emptyLibrary, newBoard, type Board, type Format, type LadderAttr, type Library, type RuleSet, type Rules, type Spot } from './schema';
+import type { ParsedWish } from './lib/wishParse';
 import { parseLibraryJson, repairStoredLibrary, validateLibrary } from './lib/libraryValidation';
 import type { ElementRecord } from './lib/audit';
 import type { FitMode } from './lib/geometry';
@@ -245,9 +246,21 @@ export const auditHoverSelectors = signal<string[] | null>(null);
 /** 「ルールで校正する」の要求。trueにするとHtmlBoardがルールから外れた要素を箇所にし、falseへ戻す。 */
 export const auditRuleCheckRequest = signal(false);
 
-export type PaletteCategory = 'position' | 'color' | 'font' | 'ladder' | 'motion' | 'text' | 'rule';
+export type PaletteCategory = 'position' | 'color' | 'font' | 'ladder' | 'motion' | 'text' | 'rule' | 'add';
 /** Sheetの行をクリックすると、その行を作ったピッカーをPaletteで開く要求。Paletteが読んだら自分でnullに戻す。 */
 export const requestOpenCategory = signal<{ spotId: string; category: PaletteCategory } | null>(null);
+
+/** H1: 書き込む欄で「要望」の行を押すと、その文が欄に戻り書き直し中になる(noteId)。 */
+export const editingWishId = signal<string | null>(null);
+
+/** H1: 書き込む欄が「足す/消す」と読めている間、選択中の箇所に出す下書き(4.3)。 */
+export const draftWish = signal<{ spotId: string; interp: ParsedWish } | null>(null);
+
+/** H1: 朱のバー「＋足す」ポップオーバーの開閉。 */
+export const addPopoverOpen = signal(false);
+
+/** H2: 04送り状ビュー(画面状態のみ、保存しない)。 */
+export const handoffOpen = signal(false);
 
 export function toggleOrderSpot(id: string): void {
   updateBoard((b) => ({

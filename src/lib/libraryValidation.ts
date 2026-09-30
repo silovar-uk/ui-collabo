@@ -30,7 +30,7 @@ function noteAt(value: unknown, path: string): Note {
   if (!isRecord(value)) fail(path, 'が不正です');
   stringAt(value.id, `${path}.id`);
   const kind = value.kind;
-  if (!['ladder', 'color', 'font', 'motion', 'rule', 'text'].includes(String(kind))) fail(`${path}.kind`, 'が未対応です');
+  if (!['ladder', 'color', 'font', 'motion', 'rule', 'text', 'wish', 'add', 'remove'].includes(String(kind))) fail(`${path}.kind`, 'が未対応です');
   if (kind === 'text') {
     if (typeof value.text !== 'string' || !Array.isArray(value.chips) || !value.chips.every((x) => typeof x === 'string')) fail(path, 'のtext指定が不正です');
   }
@@ -45,6 +45,15 @@ function noteAt(value: unknown, path: string): Note {
     if (!['fontSize', 'weight', 'spacing', 'radius', 'scale', 'lineWidth', 'speed', 'intensity'].includes(String(value.attr))) fail(`${path}.attr`, 'が不正です');
     if (!isRecord(value.target) || (typeof value.target.step !== 'number' && typeof value.target.delta !== 'number')) fail(`${path}.target`, 'が不正です');
   }
+  if (kind === 'wish') stringAt(value.text, `${path}.text`);
+  if (kind === 'add') {
+    if (!['button', 'heading', 'text', 'image', 'icon', 'link', 'input', 'line', 'box'].includes(String(value.part))) fail(`${path}.part`, 'が不正です');
+    if (!['above', 'below', 'left', 'right', 'inside'].includes(String(value.place))) fail(`${path}.place`, 'が不正です');
+    if (value.label !== undefined && typeof value.label !== 'string') fail(`${path}.label`, 'が不正です');
+    if (value.said !== undefined && typeof value.said !== 'string') fail(`${path}.said`, 'が不正です');
+    if (value.rect !== undefined) rectAt(value.rect, `${path}.rect`);
+  }
+  if (kind === 'remove' && value.said !== undefined && typeof value.said !== 'string') fail(`${path}.said`, 'が不正です');
   return value as unknown as Note;
 }
 
